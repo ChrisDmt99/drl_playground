@@ -1,7 +1,7 @@
 import numpy as np
 import core.policies as policies 
 
-class StaticAgent:
+class PolicyAgent:
     def __init__(self, seed, num_states, num_actions, policy_name, policy_params):
         # Set the random seed for reproducibility
         np.random.seed(seed)
@@ -48,22 +48,22 @@ class StaticAgent:
         # Use the specified policy to select an action based on the Q-table
         if self.policy_name == "epsilon_greedy":
             # Implement epsilon-greedy action selection
-            return policies.epsilon_greedy_action(q_values, self.epsilon, action_space)
+            return policies.epsilon_greedy_policy(q_values, self.epsilon, action_space)
         
         elif self.policy_name == "softmax":
             # Implement softmax action selection
-            return policies.softmax_action(q_values, self.temperature)
+            return policies.softmax_policy(q_values, self.temperature)
         
         elif self.policy_name == "ucb":
             # Implement Upper Confidence Bound (UCB) action selection 
-            action, reason = policies.ucb_action(q_values, self.c, self.state_count[state], self.action_counts[state])
+            action, reason = policies.ucb_policy(q_values, self.c, self.state_count[state], self.action_counts[state])
             self.state_count[state] += 1       
             self.action_counts[state][action] += 1
             return action, reason
         
         elif self.policy_name == "thompson_sampling":
             # Implement Thompson Sampling action selection
-            action, reason = policies.thompson_sampling_action(q_values, self.alpha, self.beta, self.action_counts[state])
+            action, reason = policies.thompson_sampling_policy(q_values, self.alpha, self.beta, self.action_counts[state])
             self.state_count[state] += 1       
             self.action_counts[state][action] += 1
             return action, reason

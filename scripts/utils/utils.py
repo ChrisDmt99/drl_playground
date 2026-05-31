@@ -15,6 +15,40 @@ def read_frozen_lake_params(file_path):
         params = yaml.safe_load(file)
     return params
 
+def linear_decay_schedule(init_value, min_value, decay_rate, num_episodes):
+    """
+    Creates a linear decay schedule for a learning rate or other hyperparameter.
+
+    Args:
+        init_value (float): Initial value of the parameter.
+        min_value (float): Minimum value the parameter should decay to.
+        decay_rate (float): Not used in linear decay (kept for API consistency).
+        num_episodes (int): Total number of episodes for the decay schedule.
+
+    Returns:
+        numpy.ndarray: Array of decayed values for each episode.
+    """
+    episodes = np.arange(num_episodes)
+    schedule = np.maximum(min_value, init_value - (init_value - min_value) * episodes / num_episodes)
+    return schedule
+
+def exponential_decay_schedule(init_value, min_value, decay_rate, num_episodes):
+    """
+    Creates an exponential decay schedule for a learning rate or other hyperparameter.
+
+    Args:
+        init_value (float): Initial value of the parameter.
+        min_value (float): Minimum value the parameter should decay to.
+        decay_rate (float): Exponential decay rate (0 < decay_rate < 1).
+        num_episodes (int): Total number of episodes for the decay schedule.
+
+    Returns:
+        numpy.ndarray: Array of decayed values for each episode.
+    """
+    episodes = np.arange(num_episodes)
+    schedule = np.maximum(min_value, min_value + (init_value - min_value) * (decay_rate ** (episodes / num_episodes)))
+    return schedule
+
 def compute_alpha_beta(Q, ts_alpha, ts_beta, N, unimodal=True):
     """
     Computes the alpha and beta parameters for the Beta distribution based on the Q-values and action counts.
@@ -47,3 +81,4 @@ def compute_alpha_beta(Q, ts_alpha, ts_beta, N, unimodal=True):
         beta = 1 + np.log(1 + np.exp(beta))
 
     return alpha, beta
+

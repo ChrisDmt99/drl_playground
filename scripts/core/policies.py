@@ -1,9 +1,22 @@
 import numpy as np
 from utils.utils import compute_alpha_beta
 
-def epsilon_greedy_action(q_values, epsilon, action_space):
+def random_policy(action_space):
     """
-    Epsilon-Greedy action selection based on the Q-values and an epsilon parameter.
+    Select a random action from the action space.
+    
+    Args:
+        action_space (gym.Space): The action space of the environment, used to sample random actions.
+
+    Returns:
+        action (int): The index of the selected action.
+    """
+    # Exploration: choose a random action
+    return action_space.sample(), "Random Action"
+    
+def epsilon_greedy_policy(q_values, epsilon, action_space):
+    """
+    Epsilon-Greedy policy selection based on the Q-values and an epsilon parameter.
     
     Args:
         q_values (numpy.ndarray): The Q-values for each action.
@@ -21,7 +34,7 @@ def epsilon_greedy_action(q_values, epsilon, action_space):
         best_action = np.random.choice(np.where(q_values == np.max(q_values))[0])
         return best_action, "Epsilon-Greedy Best Action"
     
-def softmax_action(q_values, temperature):
+def softmax_policy(q_values, temperature):
     """
     Select an action using the softmax policy based on the Q-values and a temperature parameter.
 
@@ -38,9 +51,9 @@ def softmax_action(q_values, temperature):
     action = np.random.choice(len(probabilities), p=probabilities)
     return action, "Softmax Action"
 
-def ucb_action(q_values, c, state_count, action_counts):
+def ucb_policy(q_values, c, state_count, action_counts):
     """
-    Upper Confidence Bound (UCB) action selection for a multi-armed bandit problem. In a more complex environment, you would maintain separate counts and rewards
+    Upper Confidence Bound (UCB) policy selection for a multi-armed bandit problem. In a more complex environment, you would maintain separate counts and rewards
     for each action to compute the UCB values.
 
     Args:
@@ -67,9 +80,9 @@ def ucb_action(q_values, c, state_count, action_counts):
     action = np.random.choice(np.where(ucb_values == np.max(ucb_values))[0])
     return action, "UCB Action"
 
-def thompson_sampling_action(q_values, ts_alpha, ts_beta, action_counts):
+def thompson_sampling_policy(q_values, ts_alpha, ts_beta, action_counts):
     """
-    Thompson Sampling action selection for a Bernoulli bandit problem. In a more complex environment, you would maintain separate alpha and beta parameters 
+    Thompson Sampling policy selection for a Bernoulli bandit problem. In a more complex environment, you would maintain separate alpha and beta parameters 
     for each action based on observed rewards.
 
     Args:
