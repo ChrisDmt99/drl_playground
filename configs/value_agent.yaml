@@ -1,12 +1,11 @@
 env_name: "FrozenLake-v1"
 is_slippery: false
-render_mode: "human" # "human" for visualization, "rgb_array" for headless mode
+render_mode: "rgb_array" # "human" for visualization, "rgb_array" for headless mode
 episodes: 5000
 seed: 42
 
 value_prediction_params:
   algorithm_name: "td_zero" # ["td_zero", "td_lambda"]
-
   init_alpha: 0.1
   min_alpha: 0.01
   decay_rate: 0.99

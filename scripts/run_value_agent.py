@@ -17,39 +17,43 @@ def run_frozenlake(config):
     # Agent initialization
     agent = ValuePredictionAgent(
         seed=config["seed"], 
+        action_space=env.action_space,
         num_episodes=config["episodes"],
         num_states=env.observation_space.n, 
         num_actions=env.action_space.n, 
         algorithm_params=config["value_prediction_params"]
     )
 
-    # # Training loop
-    # pbar = tqdm(range(config["episodes"]), leave=False, desc="Training", unit="episode")
-    # for ep in pbar:
-    #     if config["policy_agent_params"]["policy"] == "epsilon_greedy":
-    #         pbar.set_postfix(epsilon=f"{agent.epsilon:.2f}")
+    # Training loop
+    pbar = tqdm(range(config["episodes"]), leave=False, desc="Training", unit="episode")
+    for ep in pbar:
+        state, info = env.reset()
+        done = False
+
+        # Reset eligibility traces at the beginning of each episode (only for TD-lambda)
+        if agent.algorithm_name == "td_lambda":
+            agent.reset_traces() 
+
+        while not done:
+            # Select an action using the agent's policy
+            action, reason = agent.select_action()
+
+            # Take the action in the environment
+            next_state, reward, terminated, truncated, info = env.step(action)
+            done = terminated or truncated
+
+            # Compute the TD update for the value function based on the observed transition (state, action, reward, next_state)
+            agent.update_value_function(episode=ep, reward=reward, state=state, next_state=next_state, done=done)
             
-    #     elif config["policy_agent_params"]["policy"] == "softmax":
-    #         pbar.set_postfix(temperature=f"{agent.temperature:.2f}")
+            # Move to the next state
+            state = next_state
 
-    #     state, info = env.reset()
-    #     done = False 
+            # Debug
+            if reward > 0:
+                print(f"Goal reached: State: {state} -> Chosen Action: {action} | Reward: {reward} | Reason: {reason}")            
 
-    #     while not done:
-    #         # Select an action using the agent's policy
-    #         action, reason = agent.select_action(state, env.action_space)
-
-    #         # Take the action in the environment
-    #         next_state, reward, terminated, truncated, info = env.step(action)
-    #         done = terminated or truncated
-    #         state = next_state
-
-    #         # Debug
-    #         if reward > 0:
-    #             print(f"Goal reached: State: {state} -> Chosen Action: {action} | Reward: {reward} | Reason: {reason}")            
-
-    #     # Let's update the agent's parameters at the end of each episode (e.g., decay epsilon for epsilon-greedy)
-    #     agent.end_of_episode()
+        # Let's update the agent's parameters at the end of each episode (e.g., decay epsilon for epsilon-greedy)
+        agent.end_of_episode(episode=ep)
 
     # Close the environment
     print("Training completed!")
