@@ -1,8 +1,7 @@
-env_name: "FrozenLake-v1"
-is_slippery: false
 render_mode: "rgb_array" # "human" for visualization, "rgb_array" for headless mode
-episodes: 5000
+num_arms: 5
 seed: 42
+episodes: 5000
 
 policy_agent_params:
   policy: "thompson_sampling" # ["epsilon_greedy", "softmax", "ucb", "thompson_sampling"]
@@ -10,17 +9,19 @@ policy_agent_params:
   epsilon_greedy_params:
     init_epsilon: 1.0
     min_epsilon: 0.01
-    decay_rate: 0.9
-    decay_law: "exponential" # "exponential" or "linear"
+    decay_steps: 3500
+    decay_rate: 0.9985
+    decay_law: "exponential" # ["linear", "exponential", "logarithmic"] 
 
   softmax_params:
     init_temperature: 1.0
     min_temperature: 0.01
-    decay_rate: 0.99
-    decay_law: "exponential" # "exponential" or "linear"
+    decay_steps: 3500
+    decay_rate: 0.9985
+    decay_law: "exponential" # ["linear", "exponential", "logarithmic"] 
 
   ucb_params:
-    c: 0.9 # A higher value encourages more exploration, while a lower value encourages more exploitation. The optimal value of c can depend on the specific environment and the scale of the rewards.
+    c: 1.414 # A higher value encourages more exploration, while a lower value encourages more exploitation. The optimal value of c can depend on the specific environment and the scale of the rewards.
 
   thompson_sampling_params:
     alpha: 1.0 # Alpha controls the scale of the distribution
