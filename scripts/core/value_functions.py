@@ -1,6 +1,52 @@
 
+import numpy as np
+from typing import Tuple, Any
 
-def update_td_zero(v_table, alphas, episode, state, next_state, reward, gamma, done):
+def compute_true_v_star(env: Any, gamma: float, theta: float) -> np.ndarray:
+    """
+    Helper function to compute the exact V* function of the environment 
+    using Value Iteration (Planning) offline to serve as ground truth for MAE.
+    Formula: max_a Sum_{s'} P(s'|s,a) * [R(s,a,s') + gamma * V(s')].
+
+    Args:
+        env (gym.Env): The environment for which to compute V*.
+        gamma (float): The discount factor for future rewards.
+        theta (float): A small threshold for determining convergence.
+
+    Returns:
+        V (numpy.ndarray): The computed optimal value function V* for each state.
+    """
+    num_states = env.observation_space.n
+    num_actions = env.action_space.n
+    P = env.unwrapped.P
+    V = np.zeros(num_states)
+    
+    while True:
+        delta = 0
+        for s in range(num_states):
+            v_old = V[s]
+            action_values = np.zeros(num_actions)
+            for a in range(num_actions):
+                for prob, next_state, reward, done in P[s][a]:
+                    v_next = 0.0 if done else V[next_state]
+                    action_values[a] += prob * (reward + gamma * v_next)
+            V[s] = np.max(action_values)
+            delta = max(delta, abs(v_old - V[s]))
+        if delta < theta:
+            break
+
+    return V
+
+def update_td_zero(
+        v_table: np.ndarray, 
+        alphas: np.ndarray, 
+        episode: int, 
+        state: int, 
+        next_state: int, 
+        reward: float, 
+        gamma: float, 
+        done: bool
+    ) -> np.ndarray:
     """
     Implementation of pure TD(0): local update O(1).
 
@@ -28,7 +74,16 @@ def update_td_zero(v_table, alphas, episode, state, next_state, reward, gamma, d
 
     return v_table
 
-def update_td_lambda(v_table, eligibility_traces, alphas, episode, state, next_state, reward, gamma, lambda_, done):
+def update_td_lambda(
+    v_table: np.ndarray, 
+    eligibility_traces: np.ndarray, 
+    alphas: np.ndarray, 
+    episode: int, 
+    state: int, next_state: int, 
+    reward: float, gamma: float, 
+    lambda_: float, 
+    done: bool
+    ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Implementation of Backward TD(lambda): global update O(S).
 

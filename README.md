@@ -19,3 +19,8 @@ set PYTHONPATH=C:\Users\chris\Desktop\Projects\DeepReinforcementLearning\drl-pla
 
 python scripts/run_value_agent.py --config configs/value_agent.yaml
 ```
+
+
+## Author
+Christian D'Amata
+Email: damatachristian@gmail.com

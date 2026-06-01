@@ -87,26 +87,27 @@ def run_bandit(config):
     print("Training completed!")
 
     # Plotting results
+    max_possible_reward = float(np.max(env.true_probabilities))
     if agent.policy_name in ["epsilon_greedy", "softmax"]:
             fig = plt.figure(figsize=(12, 10))
             ax_error = plt.subplot2grid((2, 2), (0, 0))
             ax_decay = plt.subplot2grid((2, 2), (0, 1))
             ax_reward = plt.subplot2grid((2, 2), (1, 0), colspan=2)            
-            plot_estimation_error(ax_error, mae_history)
+            plot_estimation_error(ax_error, mae_history, table_name="Q-Table")
             
             if agent.policy_name == "epsilon_greedy":
                 plot_decay_schedule(ax_decay, agent.epsilons, parameter_name="Epsilon")
             else:
                 plot_decay_schedule(ax_decay, agent.temperatures, parameter_name="Temperature")
                 
-            plot_avg_cumulative_reward(ax_reward, running_average_rewards, env)
+            plot_avg_cumulative_reward(ax_reward, running_average_rewards, env, max_possible_reward=max_possible_reward)
             
             plt.tight_layout()
             plt.show()
     else:
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))    
-        plot_estimation_error(ax1, mae_history)
-        plot_avg_cumulative_reward(ax2, running_average_rewards, env)
+        plot_estimation_error(ax1, mae_history, table_name="Q-Table")
+        plot_avg_cumulative_reward(ax2, running_average_rewards, env, max_possible_reward=max_possible_reward)
         plt.tight_layout()
         plt.show()
 
