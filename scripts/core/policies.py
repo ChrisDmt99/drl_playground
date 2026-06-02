@@ -2,6 +2,96 @@ import numpy as np
 from typing import Tuple, Any
 from utils.utils import compute_alpha_beta
 
+def policy_evaluation(pi: np.ndarray, P: dict, gamma: float, theta: float) -> np.ndarray:
+    """
+    Policy Evaluation step: Given a policy pi, compute the value function V^pi 
+    that satisfies the Bellman expectation equation.
+    Formula: V^pi(s) = Sum_{s'} P(s'|s,pi(s)) * [R(s,pi(s),s') + gamma * V^pi(s')].
+
+    Args:
+        pi (numpy.ndarray): The policy array for which to evaluate the value function.
+        P (dict): The transition probabilities and rewards of the environment (env.unwrapped.P).
+        gamma (float): The discount factor for future rewards.
+        theta (float): A small threshold for determining convergence.
+
+    Returns:
+        V (numpy.ndarray): The computed value function V^pi for each state.
+    """
+    prev_V = np.zeros(len(P), dtype=np.float64)
+    while True:
+        V = np.zeros(len(P), dtype=np.float64)
+        for s in range(len(P)):
+            action = pi[s]
+            for prob, next_state, reward, done in P[s][action]:
+                # The multiplication * (not done) forces V(terminal_state) = 0
+                V[s] += prob * (reward + gamma * prev_V[next_state] * (not done))
+                
+        if np.max(np.abs(prev_V - V)) < theta:
+            break
+        prev_V = V.copy()
+
+    return V
+
+def policy_improvement(V: np.ndarray, P: dict, gamma: float) -> np.ndarray:
+    """
+    Policy Improvement step: Given a value function V, compute the new policy pi' 
+    that is greedy with respect to V using a one-step look-ahead.
+    Formula: pi'(s) = argmax_a Sum_{s'} P(s'|s,a) * [R(s,a,s') + gamma * V(s')].
+
+    Args:
+        V (numpy.ndarray): The value function used to compute the new policy.
+        P (dict): The transition probabilities and rewards of the environment.
+        gamma (float): The discount factor for future rewards.
+
+    Returns:
+        new_pi (numpy.ndarray): The improved policy array that is greedy with respect to V.
+    """
+    # Initialize Q-table local buffer to store action values for each state
+    Q = np.zeros((len(P), len(P[0])), dtype=np.float64)
+    for s in range(len(P)):
+        for a in range(len(P[s])):
+            for prob, next_state, reward, done in P[s][a]:
+                Q[s][a] += prob * (reward + gamma * V[next_state] * (not done))
+
+    # The new policy selects the action index with the highest Q-value for each state
+    new_pi = np.argmax(Q, axis=1)
+
+    return new_pi
+
+def compute_optimal_policy(env: Any, gamma: float, theta: float) -> np.ndarray:
+    """
+    Helper function to compute the optimal policy of the environment using Policy Iteration (Planning).
+    Alternates between Policy Evaluation and Policy Improvement until the policy stabilizes.
+
+    Args:
+        env (gym.Env): The environment for which to compute the optimal policy.
+        gamma (float): The discount factor for future rewards.
+        theta (float): A small threshold for determining convergence.
+
+    Returns:
+        pi (numpy.ndarray): The computed optimal policy as an array of action indices.
+    """
+    num_states = env.observation_space.n
+    P = env.unwrapped.P
+    
+    # Initialize policy deterministically (all states map to action index 0)
+    pi = np.zeros(num_states, dtype=int)
+
+    while True:
+        old_pi = pi.copy()
+        
+        # Step 1: Evaluate current policy to find its true value function V^pi
+        V = policy_evaluation(pi, P, gamma, theta)
+        
+        # Step 2: Improve policy greedily based on the newly computed V^pi
+        pi = policy_improvement(V, P, gamma)
+        
+        # Convergence check: if the policy mapping does not change, pi* is found
+        if np.array_equal(old_pi, pi):
+            break
+
+    return pi
+
 def random_policy(action_space: Any, np_random: np.random.Generator) -> Tuple[int, str]:
     """
     Select a random action from the action space.

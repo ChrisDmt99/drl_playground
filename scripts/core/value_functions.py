@@ -1,12 +1,10 @@
-
 import numpy as np
 from typing import Tuple, Any
 
-def compute_true_v_star(env: Any, gamma: float, theta: float) -> np.ndarray:
+def compute_optimal_v_function(env: Any, gamma: float, theta: float) -> np.ndarray:
     """
-    Helper function to compute the exact V* function of the environment 
-    using Value Iteration (Planning) offline to serve as ground truth for MAE.
-    Formula: max_a Sum_{s'} P(s'|s,a) * [R(s,a,s') + gamma * V(s')].
+    Helper function to compute the exact V* function of the environment using Value Iteration (Planning) offline.
+    Formula (Bellman optimality equation): V*(s) = max_a Sum_{s'} P(s'|s,a) * [R(s,a,s') + gamma * V*(s')].
 
     Args:
         env (gym.Env): The environment for which to compute V*.
@@ -19,22 +17,18 @@ def compute_true_v_star(env: Any, gamma: float, theta: float) -> np.ndarray:
     num_states = env.observation_space.n
     num_actions = env.action_space.n
     P = env.unwrapped.P
-    V = np.zeros(num_states)
-    
+    V = np.zeros(num_states, dtype=np.float64)
+
     while True:
-        delta = 0
+        Q = np.zeros((num_states, num_actions), dtype=np.float64)
         for s in range(num_states):
-            v_old = V[s]
-            action_values = np.zeros(num_actions)
             for a in range(num_actions):
                 for prob, next_state, reward, done in P[s][a]:
-                    v_next = 0.0 if done else V[next_state]
-                    action_values[a] += prob * (reward + gamma * v_next)
-            V[s] = np.max(action_values)
-            delta = max(delta, abs(v_old - V[s]))
-        if delta < theta:
+                    Q[s][a] += prob * (reward + gamma * V[next_state] * (not done))
+        if np.max(np.abs(V - np.max(Q, axis=1))) < theta:
             break
-
+        V = np.max(Q, axis=1)
+    # pi = lambda s: {s:a for s, a in enumerate(np.argmax(Q, axis=1))}[s]
     return V
 
 def update_td_zero(

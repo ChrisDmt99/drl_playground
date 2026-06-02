@@ -1,5 +1,5 @@
 env_name: "FrozenLake-v1"
-is_slippery: False
+is_slippery: True
 render_mode: "rgb_array" # "human" for visualization, "rgb_array" for headless mode
 episodes: 5000
 seed: 42

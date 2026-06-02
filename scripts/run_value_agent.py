@@ -6,8 +6,11 @@ import gymnasium as gym
 
 from scripts.agents.value_agent import ValuePredictionAgent
 from utils.utils import read_config_params
-from core.value_functions import compute_true_v_star
+from core.value_functions import compute_optimal_v_function
 from utils.plots import plot_avg_cumulative_reward, plot_decay_schedule, plot_estimation_error
+
+from core.policies import compute_optimal_policy
+from core.q_functions import compute_optimal_q_function
 
 def run_value_control(config):
     """
@@ -27,9 +30,16 @@ def run_value_control(config):
     )
 
     # Compute the true optimal value function V* using the environment's transition probabilities and rewards (planning engine)
-    v_star = compute_true_v_star(env, gamma=agent.gamma, theta=float(config["value_agent_params"]["theta"]))
+    v_star = compute_optimal_v_function(env, gamma=agent.gamma, theta=float(config["value_agent_params"]["theta"]))
     print(f"[Planning Engine] True V* computed successfully.\nGround Truth: {v_star.round(3)}")
 
+    # Debug
+    policy_star = compute_optimal_policy(env, gamma=agent.gamma, theta=float(config["value_agent_params"]["theta"]))
+    q_star = compute_optimal_q_function(env, gamma=agent.gamma, theta=float(config["value_agent_params"]["theta"]))
+    print(f"[Planning Engine] Optimal Policy computed successfully.\nGround Truth: {[policy_star[s] for s in range(env.observation_space.n)]}")
+    print(f"[Planning Engine] Optimal Q* computed successfully.\nGround Truth:\n{q_star.round(3)}")
+
+    # Lists to store rewards and estimation errors for plotting
     rewards_history = []
     running_average_rewards = []
     mae_history = []

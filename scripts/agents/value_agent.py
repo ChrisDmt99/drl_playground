@@ -107,7 +107,7 @@ class ValuePredictionAgent:
                 action_value += prob * (reward + self.gamma * v_next)
             action_values[action] = action_value
 
-        # Rottura dei pareggi iniziale stocastica e isolata usando np_random locale
+        # Select the action with the highest expected value. In case of ties, randomly select among the best actions.
         best_actions = np.where(action_values == np.max(action_values))[0]
         chosen_action = self.np_random.choice(best_actions)
         
