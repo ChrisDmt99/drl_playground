@@ -180,7 +180,7 @@ def ucb_policy(q_values: np.ndarray, c: float, state_count: int, action_counts: 
     action = np_random.choice(best_ucb_actions)
     return int(action), "UCB Action"
 
-def thompson_sampling_policy(q_values: np.ndarray, ts_alpha: float, ts_beta: float, action_counts: np.ndarray, np_random: np.random.Generator) -> Tuple[int, str]:
+def thompson_sampling_policy(q_values: np.ndarray, ts_alpha: float, ts_beta: float, action_counts: np.ndarray, np_random: np.random.Generator, unimodal: bool = True) -> Tuple[int, str]:
     """
     Thompson Sampling policy selection for a Bernoulli bandit problem. In a more complex environment, you would maintain separate alpha and beta parameters 
     for each action based on observed rewards.
@@ -195,7 +195,7 @@ def thompson_sampling_policy(q_values: np.ndarray, ts_alpha: float, ts_beta: flo
     Returns:
         best_action (Tuple[int, str]): The index of the selected action.
     """
-    besta_dist_alpha, besta_dist_beta = compute_alpha_beta(Q=q_values, ts_alpha=ts_alpha, ts_beta=ts_beta, N=action_counts, unimodal=False)
+    besta_dist_alpha, besta_dist_beta = compute_alpha_beta(Q=q_values, ts_alpha=ts_alpha, ts_beta=ts_beta, N=action_counts, unimodal=unimodal)
     sampled_q = np_random.beta(besta_dist_alpha, besta_dist_beta)      
     best_actions = np.where(sampled_q == np.max(sampled_q))[0]
     best_action = np_random.choice(best_actions)

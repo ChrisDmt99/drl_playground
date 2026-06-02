@@ -74,6 +74,24 @@ set PYTHONPATH=C:\Users\chris\Desktop\Projects\DeepReinforcementLearning\drl-pla
 python scripts/run_policy_agent.py --config configs/policy_agent.yaml
 ```
 
+#### Results on 6-Arm Bandit
+
+**Epsilon-Decay**
+
+![Epsilon-Decay](images/policy/6ab_eps_decay_exp.png)
+
+**Softmax**
+
+![Softmax](images/policy/6ab_softmax_exp.png)
+
+**Upper Bound Confidence**
+
+![Upper Bound Confidence](images/policy/6ab_ucb_c_1.414.png)
+
+**Thompson Sampling**
+
+![Thompson Sampling](images/policy/6ab_ts_a_1_b_1_unimodal.png)
+
 ---
 
 ### Value Agent
