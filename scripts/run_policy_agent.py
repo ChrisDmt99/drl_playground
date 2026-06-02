@@ -32,15 +32,15 @@ def run_bandit(config):
         policy_params=config['policy_agent_params'][config['policy_agent_params']['policy'] + '_params']
     )
 
-    # Compute the maximum possible reward for regret calculation (the best arm's expected reward)
-    max_possible_reward = float(np.max(env.true_probabilities))
-
     # Lists to track metrics for plotting over time
     rewards_history = []
     running_average_rewards = []
     mae_history = []
     regret_history = []       
     total_regret_history = []
+
+    # Compute the maximum possible reward for regret calculation (the best arm's expected reward)
+    max_possible_reward = float(np.max(env.true_probabilities))
 
     # Training loop
     pbar = tqdm(range(config["episodes"]), leave=True, desc="Training", unit="episode")
@@ -78,12 +78,6 @@ def run_bandit(config):
             # Update state
             state = next_state
 
-            # Debug
-            # if reward == 1.0:
-            #     print(f"VICTORY: State: {state} -> Chosen Action: {action} | Reward: {reward} | Reason: {reason}")            
-            # elif reward == 0.0:
-            #     print(f"DEFEAT: State: {state} -> Chosen Action: {action} | Reward: {reward} | Reason: {reason}")
-
         # Append rewards and calculate running average reward.
         # The cumulative moving average of the episode is calculated by 
         # dividing the total sum of historical awards by the number of current episodes (ep + 1)
@@ -116,7 +110,7 @@ def run_bandit(config):
         else:
             plot_decay_schedule(ax_decay, agent.temperatures, parameter_name="Temperature")
             
-        plot_avg_cumulative_reward(ax_reward, running_average_rewards, env, max_possible_reward=max_possible_reward)
+        plot_avg_cumulative_reward(ax_reward, running_average_rewards, title="Average Cumulative Reward", env=env, theoretical_return=max_possible_reward, asymptote_label="Optimal Expected Reward")
         plot_total_regret(ax_regret, total_regret_history)
         
         plt.tight_layout()
@@ -126,10 +120,9 @@ def run_bandit(config):
         ax_error = plt.subplot2grid((2, 2), (0, 0))
         ax_regret = plt.subplot2grid((2, 2), (0, 1))
         ax_reward = plt.subplot2grid((2, 2), (1, 0), colspan=2)
-        
         plot_estimation_error(ax_error, mae_history, table_name="Q-Table")
         plot_total_regret(ax_regret, total_regret_history)
-        plot_avg_cumulative_reward(ax_reward, running_average_rewards, env, max_possible_reward=max_possible_reward)
+        plot_avg_cumulative_reward(ax_reward, running_average_rewards, title="Average Cumulative Reward", env=env, theoretical_return=max_possible_reward, asymptote_label="Optimal Expected Reward")
         plt.tight_layout()
         plt.show()
 

@@ -1,16 +1,17 @@
 env_name: "FrozenLake-v1"
-is_slippery: True
+is_slippery: False
 render_mode: "rgb_array" # "human" for visualization, "rgb_array" for headless mode
 episodes: 5000
 seed: 42
+policy: [1, 2, 1, 0, 1, 0, 1, 0, 2, 1, 1, 0, 0, 2, 2, 0] # Optimal policy for the non-slippery frozen lake environment
 
 value_agent_params:
   algorithm_name: "td_lambda" # ["td_zero", "td_lambda"]
-  init_alpha: 0.1
-  min_alpha: 0.005
-  decay_steps: 3000
+  init_alpha: 0.5
+  min_alpha: 0.01
+  decay_steps: 4000
   decay_rate: 0.999
   decay_law: "exponential" # ["linear", "exponential", "logarithmic"] 
   gamma: 0.99
-  lambda: 0.8
+  lambda: 0.3
   theta: 1e-8 # Convergence threshold for value iteration (planning engine)

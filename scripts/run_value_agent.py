@@ -6,11 +6,8 @@ import gymnasium as gym
 
 from scripts.agents.value_agent import ValuePredictionAgent
 from utils.utils import read_config_params
-from core.value_functions import compute_optimal_v_function
-from utils.plots import plot_avg_cumulative_reward, plot_decay_schedule, plot_estimation_error
-
-from core.policies import compute_optimal_policy
-from core.q_functions import compute_optimal_q_function
+from core.policies import policy_evaluation
+from utils.plots import plot_decay_schedule, plot_estimation_error, plot_policy_quiver, plot_value_function_heatmap, plot_avg_cumulative_reward
 
 def run_value_control(config):
     """
@@ -19,6 +16,20 @@ def run_value_control(config):
     # FrozenLake environment: initialization
     env = gym.make(config["env_name"], is_slippery=config["is_slippery"], render_mode=config["render_mode"])
 
+    # Compute the list of non-terminal states (i.e., states that are not holes 'H' or goal 'G') for later use in random start state selection
+    non_terminal_states = []
+    desc = env.unwrapped.desc
+    nrows, ncols = desc.shape
+    for r in range(nrows):
+        for c in range(ncols):
+            cell = desc[r, c].decode("utf-8")
+            if cell not in ("H", "G"):
+                state = r * ncols + c
+                non_terminal_states.append(state)
+
+    # Debug
+    print(f"Non terminal states: {non_terminal_states}")
+
     # Agent initialization
     agent = ValuePredictionAgent(
         seed=config["seed"], 
@@ -26,35 +37,42 @@ def run_value_control(config):
         num_episodes=config["episodes"],
         num_states=env.observation_space.n, 
         num_actions=env.action_space.n, 
-        algorithm_params=config["value_agent_params"]
+        algorithm_params=config["value_agent_params"],
+        policy=config["policy"]
     )
 
-    # Compute the true optimal value function V* using the environment's transition probabilities and rewards (planning engine)
-    v_star = compute_optimal_v_function(env, gamma=agent.gamma, theta=float(config["value_agent_params"]["theta"]))
-    print(f"[Planning Engine] True V* computed successfully.\nGround Truth: {v_star.round(3)}")
-
-    # Debug
-    policy_star = compute_optimal_policy(env, gamma=agent.gamma, theta=float(config["value_agent_params"]["theta"]))
-    q_star = compute_optimal_q_function(env, gamma=agent.gamma, theta=float(config["value_agent_params"]["theta"]))
-    print(f"[Planning Engine] Optimal Policy computed successfully.\nGround Truth: {[policy_star[s] for s in range(env.observation_space.n)]}")
-    print(f"[Planning Engine] Optimal Q* computed successfully.\nGround Truth:\n{q_star.round(3)}")
+    # Compute the optimal value function V of the selected policy
+    v_pi = policy_evaluation(pi=agent.policy, P=env.unwrapped.P, gamma=agent.gamma, theta=float(config["value_agent_params"]["theta"]))
+    print(f"[Planning Engine] True V* computed successfully.\nGround Truth: {v_pi.round(3)}")
 
     # Lists to store rewards and estimation errors for plotting
-    rewards_history = []
     running_average_rewards = []
     mae_history = []
 
     # Training loop
+    env.reset(seed=config["seed"])
+    cumulative_return = 0.0
     pbar = tqdm(range(config["episodes"]), leave=False, desc="Training", unit="episode")
     for ep in pbar:
         pbar.set_postfix(alpha=f"{agent.alphas[ep]:.4f}")
 
+        # We noticed a problem where the MAE between v_pi and v_table doesn't reset as expected.
+        # By analyzing the heatmaps of the two v-functions, we noticed that, correctly, by assigning a 
+        # fixed and deterministic policy # and always starting from the same state, the agent always follows the same path in the environment.
+        # This means that the (predicted) v-function of the states visited by the agent will be estimated correctly, while for the 
+        # unvisited states it remains constant. To overcome this problem, the agent must start from a random state at each 
+        # episode, thus allowing it to visit all the states.
+        start_state = np.random.choice(non_terminal_states)
+
         # Reset the environment to the initial state
-        state, info = env.reset(seed=config["seed"] + ep)
+        env.reset()
+        env.unwrapped.s = start_state
+        state = start_state
         done = False
 
-        # Initialize episode reward
-        episode_reward = 0
+        # Initialize episode return
+        episode_return = 0.0
+        discount = 1.0
 
         # Reset eligibility traces at the beginning of each episode (only for TD-lambda)
         if agent.algorithm_name == "td_lambda":
@@ -62,7 +80,7 @@ def run_value_control(config):
 
         while not done:
             # Select an action using the agent's policy
-            action, reason = agent.select_action(state, env.unwrapped.P)
+            action, reason = agent.select_action(state)
 
             # Take the action in the environment
             next_state, reward, terminated, truncated, info = env.step(action)
@@ -71,8 +89,9 @@ def run_value_control(config):
             # Compute the TD update for the value function based on the observed transition (state, action, reward, next_state)
             agent.update_value_function(episode=ep, reward=reward, state=state, next_state=next_state, done=done)
             
-            # Update episode reward
-            episode_reward += reward
+            # Update episode return
+            episode_return += discount * reward
+            discount *= agent.gamma
 
             # Move to the next state
             state = next_state
@@ -82,11 +101,11 @@ def run_value_control(config):
                 print(f"Goal reached: State: {state} -> Chosen Action: {action} | Reward: {reward} | Reason: {reason}")            
         
         # Append rewards and calculate running average reward.
-        rewards_history.append(episode_reward)
-        running_average_rewards.append(np.sum(rewards_history) / (ep + 1))
+        cumulative_return += episode_return
+        running_average_rewards.append(cumulative_return  / (ep + 1))
         
-        # Calculate Mean Absolute Error (MAE) between current V-table and true V*
-        current_mae = np.mean(np.abs(v_star - agent.v_table))
+        # Calculate Mean Absolute Error (MAE) between current V-table and V^pi
+        current_mae = np.mean(np.abs(v_pi - agent.v_table))
         mae_history.append(current_mae)
 
         # Let's update the agent's parameters at the end of each episode (e.g., decay epsilon for epsilon-greedy)
@@ -96,15 +115,17 @@ def run_value_control(config):
     print("Training completed!")
 
     # Plotting results
-    max_possible_reward = env.spec.reward_threshold
-    fig = plt.figure(figsize=(12, 10))
-    ax_error = plt.subplot2grid((2, 2), (0, 0))
-    ax_decay = plt.subplot2grid((2, 2), (0, 1))
-    ax_reward = plt.subplot2grid((2, 2), (1, 0), colspan=2)  
-    plot_estimation_error(ax_error, mae_history, table_name="V-Table")
-    plot_decay_schedule(ax_decay, agent.alphas, parameter_name="Alpha")
-    plot_avg_cumulative_reward(ax_reward, running_average_rewards, env, max_possible_reward=max_possible_reward)
-
+    theoretical_return = np.mean(v_pi[non_terminal_states])
+    fig, axs = plt.subplots(2, 3, figsize=(18, 10))
+    plot_estimation_error(axs[0, 0], mae_history, table_name="Predicted V vs V^pi")
+    plot_avg_cumulative_reward(axs[0, 1], running_average_rewards, title="Average Discounted Return", env=env, theoretical_return=theoretical_return, asymptote_label="Expected Value of Returns")
+    plot_decay_schedule(axs[0, 2], agent.alphas, parameter_name="Alpha")
+    plot_value_function_heatmap(v_pi, axs[1, 0])
+    axs[1, 0].set_title("Policy Iteration Value Function V^pi", fontsize=12, fontweight='bold')
+    plot_value_function_heatmap(agent.v_table, axs[1, 1])
+    axs[1, 1].set_title("Predicted Value Function V^pi", fontsize=12, fontweight='bold') 
+    plot_policy_quiver(agent.v_table, agent.policy, axs[1, 2])
+    axs[1, 2].set_title("Evaluated Target Policy Trajectories", fontsize=12, fontweight='bold')
     plt.tight_layout()
     plt.show()
     
@@ -127,5 +148,3 @@ if __name__ == "__main__":
 
     # Run the FrozenLake environment with the specified parameters
     run_value_control(config=value_control_params)
-
-

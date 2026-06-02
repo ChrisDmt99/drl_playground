@@ -28,7 +28,7 @@ def compute_optimal_v_function(env: Any, gamma: float, theta: float) -> np.ndarr
         if np.max(np.abs(V - np.max(Q, axis=1))) < theta:
             break
         V = np.max(Q, axis=1)
-    # pi = lambda s: {s:a for s, a in enumerate(np.argmax(Q, axis=1))}[s]
+
     return V
 
 def update_td_zero(
@@ -97,18 +97,21 @@ def update_td_lambda(
         eligibility_traces (numpy.ndarray): The updated eligibility traces after applying the TD(lambda) update.
     """
     # Compute the TD target: reward + discounted value of the next state. If the current state is terminal, we don't consider the value of the next state.
-    td_target = reward + gamma * v_table[next_state] * (1 - done)  
+    td_target = reward + gamma * v_table[next_state] * (1.0 - float(done))  
 
     # Calculation of TD Error: Target - Current Estimate
     td_error = td_target - v_table[state]
 
     # Update the eligibility trace for the current state (incrementing it by 1 since we just visited it)
-    eligibility_traces[state] += 1
+    eligibility_traces[state] += 1.0
 
     # Update the value table based on the TD error and eligibility traces
     v_table += alphas[episode] * td_error * eligibility_traces
 
     # Decay the eligibility traces for all states (this is done after the update to ensure that the current state gets updated with the full trace value)
-    eligibility_traces *= gamma * lambda_
+    if done:
+        eligibility_traces.fill(0.0)
+    else:
+        eligibility_traces *= gamma * lambda_
 
     return v_table, eligibility_traces

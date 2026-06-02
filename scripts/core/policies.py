@@ -4,31 +4,36 @@ from utils.utils import compute_alpha_beta
 
 def policy_evaluation(pi: np.ndarray, P: dict, gamma: float, theta: float) -> np.ndarray:
     """
-    Policy Evaluation step: Given a policy pi, compute the value function V^pi 
-    that satisfies the Bellman expectation equation.
-    Formula: V^pi(s) = Sum_{s'} P(s'|s,pi(s)) * [R(s,pi(s),s') + gamma * V^pi(s')].
+    Iterative Policy Evaluation (Gauss-Seidel version). 
+    Computes V^pi for a fixed policy pi by iteratively solving the Bellman expectation equation.
+    Formula: V(s) = Sum_{s'} P(s'|s,pi(s)) * [R(s,pi(s),s') + gamma * V(s')].
 
     Args:
-        pi (numpy.ndarray): The policy array for which to evaluate the value function.
-        P (dict): The transition probabilities and rewards of the environment (env.unwrapped.P).
-        gamma (float): The discount factor for future rewards.
-        theta (float): A small threshold for determining convergence.
+        pi: policy array mapping state -> action
+        P: environment transition model (env.unwrapped.P)
+        gamma: discount factor
+        theta: convergence threshold
 
     Returns:
-        V (numpy.ndarray): The computed value function V^pi for each state.
+        V: state-value function for policy pi
     """
-    prev_V = np.zeros(len(P), dtype=np.float64)
+    num_states = len(P)
+    V = np.zeros(num_states, dtype=np.float64)
+
     while True:
-        V = np.zeros(len(P), dtype=np.float64)
-        for s in range(len(P)):
-            action = pi[s]
+        delta = 0.0
+        for s in range(num_states):
+            v_old = V[s]
+            action = int(pi[s])
+            v_new = 0.0
             for prob, next_state, reward, done in P[s][action]:
-                # The multiplication * (not done) forces V(terminal_state) = 0
-                V[s] += prob * (reward + gamma * prev_V[next_state] * (not done))
-                
-        if np.max(np.abs(prev_V - V)) < theta:
+                v_new += prob * (reward + gamma * V[next_state] * (not done))
+
+            V[s] = v_new
+            delta = max(delta, abs(v_old - v_new))
+
+        if delta < theta:
             break
-        prev_V = V.copy()
 
     return V
 

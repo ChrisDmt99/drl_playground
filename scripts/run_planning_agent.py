@@ -5,7 +5,7 @@ import gymnasium as gym
 
 from scripts.agents.planning_agent import PlanningAgent
 from utils.utils import read_config_params
-from utils.plots import plot_value_function_heatmap, plot_q_function_heatmap, plot_optimal_policy_quiver
+from utils.plots import plot_value_function_heatmap, plot_q_function_heatmap, plot_policy_quiver
 
 def run_planning_agent(config):
     """
@@ -30,7 +30,7 @@ def run_planning_agent(config):
     ax_optimal_policy = plt.subplot2grid((2, 2), (1, 0), colspan=2)
     plot_value_function_heatmap(V=V_star, ax=ax_v_function)
     plot_q_function_heatmap(Q=Q_star, ax=ax_q_function)
-    plot_optimal_policy_quiver(V=V_star, pi=pi_star, ax=ax_optimal_policy)
+    plot_policy_quiver(V=V_star, pi=pi_star, ax=ax_optimal_policy)
     plt.tight_layout()
     plt.show()
 
