@@ -1,14 +1,22 @@
 import numpy as np
 from typing import Tuple, Dict, Any
 import core.policies as policies 
+from tqdm import tqdm
 import gymnasium as gym
 from scripts.utils.schedulers import linear_decay_schedule, exponential_decay_schedule, logarithmic_decay_schedule
+from scripts.utils.utils import generate_trajectory
 
 class ControlAgent:
     """
     A policy-based agent that selects actions based on a specified policy and updates its Q-table using incremental averages.
     """
-    def __init__(self, seed: int, num_states: int, num_actions: int, num_episodes: int, policy_name: str, policy_params: Dict[str, Any]) -> None:
+    def __init__(
+            self, 
+            seed: int, 
+            num_states: int, 
+            num_actions: int, 
+            config, 
+        ) -> None:
         """
         Initialize the ControlAgent with the given parameters.
 
@@ -27,97 +35,101 @@ class ControlAgent:
         # Set the agent's parameters
         self.num_states = num_states
         self.num_actions = num_actions
-        self.num_episodes = num_episodes
-        self.policy_name = policy_name
-        self.policy_params = policy_params
+        self.num_episodes = config["episodes"]
+        self.episodes = range(self.num_episodes)
+        self.policy_name = config["policy"]
+        self.policy_params = config[config["policy"] + "_params"]  
+        self.init_alpha = config["init_alpha"]
+        self.min_alpha = config["min_alpha"]
+        self.alpha_decay_steps = config["alpha_decay_steps"]
+        self.alpha_decay_rate = config["alpha_decay_rate"]
+        self.alpha_decay_law = config["alpha_decay_law"] 
+        self.gamma = config["gamma"]
+        self.max_steps = config["max_steps"]
+        self.control_algorithm = config["control_algorithm"]
+        self.first_visit_mc = config[config["control_algorithm"] + "_params"]["first_visit"]
 
-        # Start from zeros: the agent will learn the real values incrementally
-        self.q_table = np.zeros((num_states, num_actions))
+        # Counters for UCB and Thompson Sampling policies
+        self.state_count = np.zeros(self.num_states, dtype=np.int32)
+        self.action_counts = np.zeros((self.num_states, self.num_actions), dtype=np.int32)
 
-        # Core counters for learning models (moved outside specific ifs to be globally accessible)
-        self.state_count = np.zeros(self.num_states)
-        self.action_counts = np.zeros((self.num_states, self.num_actions))
+        # Pre-computation of discounts for the return values
+        self.discounts = np.logspace(0, self.max_steps, num=self.max_steps, base=self.gamma, endpoint=False)
+
+        # Pre-computation of learning rates for each episode (optional, can be constant)     
+        self.alphas = self.init_scheduler(
+            init_val=self.init_alpha, 
+            min_val=self.min_alpha, 
+            steps=self.alpha_decay_steps, 
+            rate=self.alpha_decay_rate, 
+            law=self.alpha_decay_law
+        )  
 
         # Set policy-specific parameters
+        # Epsilon Decay Policy
         if self.policy_name == "epsilon_greedy":
-            self.init_epsilon = policy_params.get("init_epsilon", 1.0)
-            self.min_epsilon = policy_params.get("min_epsilon", 0.01)
-            self.decay_rate = policy_params.get("decay_rate", 0.9) 
-            self.epsilon = self.init_epsilon 
+            self.init_epsilon = self.policy_params["init_epsilon"]
+            self.min_epsilon = self.policy_params["min_epsilon"]
+            self.epsilon_decay_steps = self.policy_params["decay_steps"]
+            self.epsilon_decay_rate = self.policy_params["decay_rate"]
+            self.epsilon_decay_law = self.policy_params["decay_law"]
             
             # Epsilon decay schedule
-            if self.policy_params['decay_law'] == 'linear':
-                self.epsilons = linear_decay_schedule(
-                    init_value=self.init_epsilon, 
-                    min_value=self.min_epsilon, 
-                    decay_steps=self.policy_params["decay_steps"],
-                    num_episodes=num_episodes
-                )
-            
-            elif self.policy_params['decay_law'] == 'exponential':
-                self.epsilons = exponential_decay_schedule(
-                    init_value=self.init_epsilon, 
-                    min_value=self.min_epsilon, 
-                    decay_steps=self.policy_params["decay_steps"],
-                    decay_rate=self.policy_params["decay_rate"],
-                    num_episodes=num_episodes
-                )
-
-            elif self.policy_params['decay_law'] == 'logarithmic':
-                self.epsilons = logarithmic_decay_schedule(
-                    init_value=self.init_epsilon, 
-                    min_value=self.min_epsilon, 
-                    decay_steps=self.policy_params["decay_steps"],
-                    decay_rate=self.policy_params["decay_rate"],
-                    num_episodes=num_episodes
-                )
-            else:
-                raise ValueError(f"Invalid decay law: {self.policy_params['decay_law']}")
-
+            self.epsilons = self.init_scheduler(
+                init_val=self.init_epsilon, 
+                min_val=self.min_epsilon, 
+                steps=self.epsilon_decay_steps, 
+                rate=self.epsilon_decay_rate, 
+                law=self.epsilon_decay_law
+            )
+        # Softmax Policy
         elif self.policy_name == "softmax":
-            self.init_temperature = policy_params.get("init_temperature", 1.0)
-            self.min_temperature = policy_params.get("min_temperature", 0.01)
-            self.decay_rate = policy_params.get("decay_rate", 0.9)
-            self.temperature = self.init_temperature  
-
-            # Temperature decay schedule
-            if self.policy_params['decay_law'] == 'linear':
-                self.temperatures = linear_decay_schedule(
-                    init_value=self.init_temperature, 
-                    min_value=self.min_temperature, 
-                    decay_steps=self.policy_params["decay_steps"],
-                    num_episodes=num_episodes, 
-                )
+            self.init_temperature = self.policy_params["init_temperature"]
+            self.min_temperature = self.policy_params["min_temperature"]
+            self.temperature_decay_steps = self.policy_params["decay_steps"]
+            self.temperature_decay_rate = self.policy_params["decay_rate"]
+            self.temperature_decay_law = self.policy_params["decay_law"]
             
-            elif self.policy_params['decay_law'] == 'exponential':
-                self.temperatures = exponential_decay_schedule(
-                    init_value=self.init_temperature, 
-                    min_value=self.min_temperature, 
-                    decay_steps=self.policy_params["decay_steps"], 
-                    decay_rate=self.policy_params["decay_rate"],
-                    num_episodes=num_episodes
-                )
-
-            elif self.policy_params['decay_law'] == 'logarithmic':
-                self.temperatures = logarithmic_decay_schedule(
-                    init_value=self.init_temperature, 
-                    min_value=self.min_temperature, 
-                    decay_steps=self.policy_params["decay_steps"], 
-                    decay_rate=self.policy_params["decay_rate"],
-                    num_episodes=num_episodes
-                )
-            else:
-                raise ValueError(f"Invalid decay law: {self.policy_params['decay_law']}")
-
+            # Temperature decay schedule
+            self.temperatures = self.init_scheduler(
+                init_val=self.init_temperature, 
+                min_val=self.min_temperature, 
+                steps=self.temperature_decay_steps, 
+                rate=self.temperature_decay_rate, 
+                law=self.temperature_decay_law
+            )
+        # Upper Bound Confidence Policy
         elif self.policy_name == "ucb":
-            self.c = policy_params.get("c", 1.0)
-
+            self.c = self.policy_params["c"]
+        # Thompson Sampling Policy
         elif self.policy_name == "thompson_sampling":
-            self.alpha = policy_params.get("alpha", 1.0)
-            self.beta = policy_params.get("beta", 1.0)
+            self.alpha = self.policy_params["alpha"]
+            self.beta = self.policy_params["beta"]
 
         else:
-            raise ValueError(f"Invalid policy name: {policy_name}")
+            raise ValueError(f"Invalid policy name: {self.policy_name}")
+
+        # Initialize Q-table
+        self.q_table = np.zeros((num_states, num_actions), dtype=np.float32)
+
+        # Outputs placeholders
+        self.v_function = np.zeros(num_states, dtype=np.float32)
+        self.final_policy = np.zeros(num_states, dtype=np.int32)
+
+    def init_scheduler(self, init_val, min_val, steps, rate, law):
+        """
+        """
+        if law == 'linear':
+            return linear_decay_schedule(init_value=init_val, min_value=min_val, decay_steps=steps, num_episodes=self.num_episodes)
+        
+        elif law == 'exponential':
+            return exponential_decay_schedule(init_value=init_val, min_value=min_val, decay_steps=steps, decay_rate=rate, num_episodes=self.num_episodes)
+        
+        elif law == 'logarithmic':
+            return logarithmic_decay_schedule(init_value=init_val, min_value=min_val, decay_steps=steps, decay_rate=rate, num_episodes=self.num_episodes)
+        
+        else:
+            raise ValueError(f"Invalid decay law: {law}")
 
     def select_action(self, episode, state: int, action_space: gym.Space) -> Tuple[int, str]:
         """
@@ -130,9 +142,9 @@ class ControlAgent:
         Returns:
             action (int): The index of the selected action.
             reason (str): The reason for selecting the action.
-        """
+        """  
         q_values = self.q_table[state]
-        
+
         # Use the specified policy to select an action based on the Q-table
         if self.policy_name == "epsilon_greedy":
             # Implement epsilon-greedy action selection
@@ -152,25 +164,110 @@ class ControlAgent:
         
         else:
             raise ValueError("Unsupported policy")
-        
-    def update(self, state: int, action: int, reward: float) -> None:
+    
+    def run(self, env: gym.Env, Q_star, V_star):
         """
-        Updates the Q-table using the incremental average formula. Tracks visits and sample averages for each state-action pair dynamically.
+        
+        """
+        self.mae_history = []
+        self.rewards_history = []
+        self.running_average_rewards = []
+        self.total_regret_history = []
 
-        Args:
-            state (int): The current state.
-            action (int): The chosen action.
-            reward (float): The reward received for taking the action in the current state.
+        if self.control_algorithm == "mc_control": 
+            self.run_mc_agent(env, Q_star, V_star)
+
+        elif self.control_algorithm == "sarsa":
+            self.run_sarsa_agent(env, Q_star, V_star)
+
+        elif self.control_algorithm == "q_learning":
+            self.run_q_learning_agent(env, Q_star, V_star)
+
+        elif self.control_algorithm == "double_q_learning":
+            self.run_double_q_learning_agent(env, Q_star, V_star)
+
+        else:
+            raise ValueError("Unsupported control algorithm")
+
+    def run_mc_agent(self, env, Q_star, V_star):
         """
-        # Increment exploration counters
-        self.state_count[state] += 1
-        self.action_counts[state][action] += 1
-        
-        # Compute dynamic step size for the sample average (alpha = 1 / N(s, a)).
-        # This ensures that each reward contributes equally to the mean,
-        # making early updates large and late updates progressively more stable.        
-        step_size = 1.0 / self.action_counts[state][action]
-        
-        # Dynamic Q-table update rule
-        # NewEstimate = OldEstimate + StepSize * [Target - OldEstimate]
-        self.q_table[state][action] += step_size * (reward - self.q_table[state][action])
+        """
+        # Training loop
+        cumulative_regret = 0.0
+        pbar = tqdm(self.episodes, leave=True, desc="MC Control Training", unit="episode")
+        for ep in pbar:
+            if self.policy_name == "epsilon_greedy":
+                pbar.set_postfix(epsilon=f"{self.epsilons[ep]:.2f}")
+                
+            elif self.policy_name == "softmax":
+                pbar.set_postfix(temperature=f"{self.temperatures[ep]:.2f}")
+            
+            # Lambda function to select the action (policy) to pass to the trajectory generation function
+            select_action_fn = lambda s: self.select_action(episode=ep, state=s, action_space=env.action_space)[0]
+
+            # Generate trajectory
+            trajectory = generate_trajectory(agent_select_action_fn=select_action_fn, env=env, max_steps=self.max_steps)
+
+            # Calculating historical metrics
+            episode_reward = sum([step[2] for step in trajectory])
+            self.rewards_history.append(episode_reward)
+            self.running_average_rewards.append(np.mean(self.rewards_history))
+
+            # Cumulative Regret calculation based on the starting state of the current episode
+            if V_star is not None and len(trajectory) > 0:
+                initial_state = trajectory[0][0]
+                episode_regret = V_star[initial_state] - episode_reward
+                cumulative_regret += max(0.0, episode_regret)
+            self.total_regret_history.append(cumulative_regret)
+
+            # Visited actions-states
+            visited = np.zeros((self.num_states, self.num_actions), dtype=bool)
+            
+            # For each timestamp of the trajectory
+            for t, (state, action, _, _, _) in enumerate(trajectory):
+                # Updated exploration counters for UCB and Thompson Sampling 
+                self.state_count[state] += 1
+                self.action_counts[state, action] += 1
+                
+                # MC Control: First Visit Logic
+                if visited[state][action] and self.first_visit_mc:
+                    continue
+                visited[state][action] = True
+
+                # Remaining steps to the end of the trajectory
+                n_steps = len(trajectory[t:])
+
+                # Calculating reward and return from the current timestamp
+                rewards_from_t = [step[2] for step in trajectory[t:]]
+                _return = np.sum(self.discounts[:n_steps] * rewards_from_t)
+
+                # Computing the discounted cumulative return
+                _return = np.sum(self.discounts[:n_steps] * trajectory[t:, 2])
+
+                # Update of thr Q-table
+                self.q_table[state][action] += self.alphas[ep] * (_return - self.q_table[state][action])
+            
+            # Computing the MAE on the Q-table
+            if Q_star is not None:
+                self.mae_history.append(np.mean(np.abs(Q_star - self.q_table)))
+            else:
+                self.mae_history.append(0.0)
+
+        # Compute the V-function and thr policy corrisponding to the final Q-table
+        self.v_function = np.max(self.q_table, axis=1)
+        self.final_policy = np.argmax(self.q_table, axis=1)
+
+    def run_sarsa_agent(self, env, Q_star, V_star):
+        """
+        """
+        pass
+
+    def run_q_learning_agent(self, env, Q_star, V_star):
+        """
+        """
+        pass
+
+    def run_double_q_learning_agent(self, env, Q_star, V_star):
+        """
+        """
+        pass

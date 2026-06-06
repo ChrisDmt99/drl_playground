@@ -8,7 +8,7 @@ from scripts.agents.policy_agent import PolicyAgent
 from utils.utils import read_config_params
 from utils.plots import plot_avg_cumulative_reward, plot_decay_schedule, plot_estimation_error, plot_total_regret
 
-def run_bandit(config):
+def run_policy_agent(config):
     """
     Runs the Multi-Armed Bandit environment with a policy-based agent.
 
@@ -141,9 +141,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Read parameters from the YAML configuration file
-    bandit_params = read_config_params(file_path=args.config)
+    policy_params = read_config_params(file_path=args.config)
 
     # Run the Multi-Armed Bandit environment with the specified parameters
-    run_bandit(config=bandit_params)
+    run_policy_agent(config=policy_params)
 
 

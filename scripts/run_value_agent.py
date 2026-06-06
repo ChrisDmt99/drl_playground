@@ -10,7 +10,7 @@ from core.policies import policy_evaluation
 from utils.plots import plot_decay_schedule, plot_estimation_error, plot_policy_quiver, plot_value_function_heatmap, plot_avg_cumulative_reward
 from utils.env_utils import get_grid_shape, get_terminal_states, get_goal_states, get_action_names, get_action_vectors, get_special_states
 
-def run_value_control(config):
+def run_value_agent(config):
     """
     Runs the FrozenLake environment with a Q-Learning agent.
     """
@@ -185,7 +185,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Read parameters from the YAML configuration file
-    value_control_params = read_config_params(file_path=args.config)
+    value_agent_params = read_config_params(file_path=args.config)
 
     # Run the FrozenLake environment with the specified parameters
-    run_value_control(config=value_control_params)
+    run_value_agent(config=value_agent_params)

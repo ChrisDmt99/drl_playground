@@ -1,3 +1,5 @@
+from itertools import count
+
 import yaml
 import numpy as np
 
@@ -47,3 +49,36 @@ def compute_alpha_beta(Q, ts_alpha, ts_beta, N, unimodal=True):
         beta = 1 + np.log(1 + np.exp(beta))
 
     return alpha, beta
+
+def generate_trajectory(agent_select_action_fn, env, max_steps):
+    """
+    
+    """    
+    done = False
+    trajectory = []
+    
+    # Iterate until the end of the episode
+    while not done:
+        state, info = env.reset()
+
+        # Timestamps
+        for t in count():
+            # Select the action
+            action = agent_select_action_fn(state)
+
+            # Do the selected action on the environment
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated 
+
+            # Append the experience to the trajectory
+            trajectory.append((state, action, reward, next_state, done))
+
+            # Break if the episode is terminated or if it has reached its maximum duration
+            if done or t >= max_steps - 1:
+                break
+            
+            # Update the environment state
+            state = next_state
+
+    return np.array(trajectory, dtype=object)
+

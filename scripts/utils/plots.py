@@ -55,12 +55,29 @@ def plot_decay_schedule(ax: Axes, schedule: np.ndarray, parameter_name: str = "H
         parameter_name (str): The name of the hyperparameter for the label and title (default: "Hyperparameter").
     """
     ax.plot(schedule, color="tab:orange", linewidth=2, label=f"Current {parameter_name}")
-    ax.axhline(y=schedule[-1], color="black", linestyle=":", alpha=0.7, label=f"Min Value ({schedule[-1]:.3f})")
+    # ax.axhline(y=schedule[-1], color="black", linestyle=":", alpha=0.7, label=f"Min Value ({schedule[-1]:.3f})")
     ax.set_title(f"{parameter_name} Decay Schedule", fontsize=12, fontweight="bold")
     ax.set_xlabel("Episodes")
     ax.set_ylabel(f"{parameter_name}")
     ax.grid(True, linestyle=":", alpha=0.6)
     ax.legend()
+
+def plot_total_regret(ax: plt.Axes, total_regret_history: list):
+    """
+    Plots the cumulative total regret over political selection episodes.
+    An optimal policy should show a sub-linear growth (logarithmic).
+    
+    Args:
+        ax (matplotlib.axes.Axes): The axes object to plot on.
+        total_regret_history (list): Array containing the historical total sum of regret.
+    """
+    ax.plot(total_regret_history, color="crimson", linewidth=2, label="Total Regret")
+    
+    ax.set_title("Total Cumulative Regret", fontsize=12, fontweight='bold')
+    ax.set_xlabel("Episodes")
+    ax.set_ylabel("Accumulated Regret")
+    ax.grid(True, linestyle="--", alpha=0.6)
+    ax.legend(loc="upper left")
 
 def plot_q_function_heatmap(
     Q: np.ndarray,

@@ -129,6 +129,39 @@ python scripts/run_value_agent.py --config configs/value_agent.yaml
 
 ---
 
+### Control Agent
+
+The **Control Agent** estimate the state-action value function (Q) of the environment by using Monte Carlo Control, SARSA, and Q-Learning algorithms.
+
+#### Running the Control Agent
+
+```bash
+set PYTHONPATH=C:\Users\chris\Desktop\Projects\DeepReinforcementLearning\drl-playground
+python scripts/run_control_agent.py --config configs/control_agent.yaml
+```
+
+#### Results on Taxi V3 Environment
+
+**Monte Carlo Control**
+
+![Monte Carlo Control](images/control/.png)
+
+
+**SARSA**
+
+![SARSA](images/control/.png)
+
+**Q-Learning**
+
+![Q-Learning](images/control/.png)
+
+
+**Double Q-Learning**
+
+![Double Q-Learning](images/control/.png)
+
+---
+
 ## 👨‍💻 Author
 
 **Christian D'Amata**  
