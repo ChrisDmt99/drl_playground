@@ -50,7 +50,6 @@ class PolicyAgent:
                 self.epsilons = linear_decay_schedule(
                     init_value=self.init_epsilon, 
                     min_value=self.min_epsilon, 
-                    decay_steps=self.policy_params["decay_steps"],
                     num_episodes=num_episodes
                 )
             
@@ -58,7 +57,6 @@ class PolicyAgent:
                 self.epsilons = exponential_decay_schedule(
                     init_value=self.init_epsilon, 
                     min_value=self.min_epsilon, 
-                    decay_steps=self.policy_params["decay_steps"],
                     decay_rate=self.policy_params["decay_rate"],
                     num_episodes=num_episodes
                 )
@@ -67,7 +65,6 @@ class PolicyAgent:
                 self.epsilons = logarithmic_decay_schedule(
                     init_value=self.init_epsilon, 
                     min_value=self.min_epsilon, 
-                    decay_steps=self.policy_params["decay_steps"],
                     decay_rate=self.policy_params["decay_rate"],
                     num_episodes=num_episodes
                 )
@@ -85,7 +82,6 @@ class PolicyAgent:
                 self.temperatures = linear_decay_schedule(
                     init_value=self.init_temperature, 
                     min_value=self.min_temperature, 
-                    decay_steps=self.policy_params["decay_steps"],
                     num_episodes=num_episodes, 
                 )
             
@@ -93,7 +89,6 @@ class PolicyAgent:
                 self.temperatures = exponential_decay_schedule(
                     init_value=self.init_temperature, 
                     min_value=self.min_temperature, 
-                    decay_steps=self.policy_params["decay_steps"], 
                     decay_rate=self.policy_params["decay_rate"],
                     num_episodes=num_episodes
                 )
@@ -102,7 +97,6 @@ class PolicyAgent:
                 self.temperatures = logarithmic_decay_schedule(
                     init_value=self.init_temperature, 
                     min_value=self.min_temperature, 
-                    decay_steps=self.policy_params["decay_steps"], 
                     decay_rate=self.policy_params["decay_rate"],
                     num_episodes=num_episodes
                 )

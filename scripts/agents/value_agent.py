@@ -50,7 +50,6 @@ class ValuePredictionAgent:
             self.alphas = linear_decay_schedule(
                 init_value=self.init_alpha, 
                 min_value=self.min_alpha, 
-                decay_steps=self.algorithm_params["decay_steps"],
                 num_episodes=num_episodes
             )
         
@@ -58,7 +57,6 @@ class ValuePredictionAgent:
             self.alphas = exponential_decay_schedule(
                 init_value=self.init_alpha, 
                 min_value=self.min_alpha, 
-                decay_steps=self.algorithm_params["decay_steps"],
                 decay_rate=self.algorithm_params["decay_rate"],
                 num_episodes=num_episodes
             )
@@ -67,7 +65,6 @@ class ValuePredictionAgent:
             self.alphas = logarithmic_decay_schedule(
                 init_value=self.init_alpha, 
                 min_value=self.min_alpha, 
-                decay_steps=self.algorithm_params["decay_steps"],
                 decay_rate=self.algorithm_params["decay_rate"],
                 num_episodes=num_episodes
             )

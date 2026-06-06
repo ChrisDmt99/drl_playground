@@ -41,7 +41,6 @@ class ControlAgent:
         self.policy_params = config[config["policy"] + "_params"]  
         self.init_alpha = config["init_alpha"]
         self.min_alpha = config["min_alpha"]
-        self.alpha_decay_steps = config["alpha_decay_steps"]
         self.alpha_decay_rate = config["alpha_decay_rate"]
         self.alpha_decay_law = config["alpha_decay_law"] 
         self.gamma = config["gamma"]
@@ -60,7 +59,6 @@ class ControlAgent:
         self.alphas = self.init_scheduler(
             init_val=self.init_alpha, 
             min_val=self.min_alpha, 
-            steps=self.alpha_decay_steps, 
             rate=self.alpha_decay_rate, 
             law=self.alpha_decay_law
         )  
@@ -70,7 +68,6 @@ class ControlAgent:
         if self.policy_name == "epsilon_greedy":
             self.init_epsilon = self.policy_params["init_epsilon"]
             self.min_epsilon = self.policy_params["min_epsilon"]
-            self.epsilon_decay_steps = self.policy_params["decay_steps"]
             self.epsilon_decay_rate = self.policy_params["decay_rate"]
             self.epsilon_decay_law = self.policy_params["decay_law"]
             
@@ -78,7 +75,6 @@ class ControlAgent:
             self.epsilons = self.init_scheduler(
                 init_val=self.init_epsilon, 
                 min_val=self.min_epsilon, 
-                steps=self.epsilon_decay_steps, 
                 rate=self.epsilon_decay_rate, 
                 law=self.epsilon_decay_law
             )
@@ -86,15 +82,13 @@ class ControlAgent:
         elif self.policy_name == "softmax":
             self.init_temperature = self.policy_params["init_temperature"]
             self.min_temperature = self.policy_params["min_temperature"]
-            self.temperature_decay_steps = self.policy_params["decay_steps"]
             self.temperature_decay_rate = self.policy_params["decay_rate"]
             self.temperature_decay_law = self.policy_params["decay_law"]
             
             # Temperature decay schedule
             self.temperatures = self.init_scheduler(
                 init_val=self.init_temperature, 
-                min_val=self.min_temperature, 
-                steps=self.temperature_decay_steps, 
+                min_val=self.min_temperature,  
                 rate=self.temperature_decay_rate, 
                 law=self.temperature_decay_law
             )
@@ -116,17 +110,17 @@ class ControlAgent:
         self.v_function = np.zeros(num_states, dtype=np.float32)
         self.final_policy = np.zeros(num_states, dtype=np.int32)
 
-    def init_scheduler(self, init_val, min_val, steps, rate, law):
+    def init_scheduler(self, init_val, min_val, rate, law):
         """
         """
         if law == 'linear':
-            return linear_decay_schedule(init_value=init_val, min_value=min_val, decay_steps=steps, num_episodes=self.num_episodes)
+            return linear_decay_schedule(init_value=init_val, min_value=min_val, num_episodes=self.num_episodes)
         
         elif law == 'exponential':
-            return exponential_decay_schedule(init_value=init_val, min_value=min_val, decay_steps=steps, decay_rate=rate, num_episodes=self.num_episodes)
+            return exponential_decay_schedule(init_value=init_val, min_value=min_val, decay_rate=rate, num_episodes=self.num_episodes)
         
         elif law == 'logarithmic':
-            return logarithmic_decay_schedule(init_value=init_val, min_value=min_val, decay_steps=steps, decay_rate=rate, num_episodes=self.num_episodes)
+            return logarithmic_decay_schedule(init_value=init_val, min_value=min_val, decay_rate=rate, num_episodes=self.num_episodes)
         
         else:
             raise ValueError(f"Invalid decay law: {law}")
@@ -237,10 +231,6 @@ class ControlAgent:
                 # Remaining steps to the end of the trajectory
                 n_steps = len(trajectory[t:])
 
-                # Calculating reward and return from the current timestamp
-                rewards_from_t = [step[2] for step in trajectory[t:]]
-                _return = np.sum(self.discounts[:n_steps] * rewards_from_t)
-
                 # Computing the discounted cumulative return
                 _return = np.sum(self.discounts[:n_steps] * trajectory[t:, 2])
 
@@ -260,7 +250,38 @@ class ControlAgent:
     def run_sarsa_agent(self, env, Q_star, V_star):
         """
         """
-        pass
+        # Lambda function to select the action (policy) to pass to the trajectory generation function
+        select_action_fn = lambda s: self.select_action(episode=ep, state=s, action_space=env.action_space)[0]
+        
+        # Training loop
+        cumulative_regret = 0.0
+        pbar = tqdm(self.episodes, leave=True, desc="MC Control Training", unit="episode")
+        for ep in pbar:
+            if self.policy_name == "epsilon_greedy":
+                pbar.set_postfix(epsilon=f"{self.epsilons[ep]:.2f}")
+                
+            elif self.policy_name == "softmax":
+                pbar.set_postfix(temperature=f"{self.temperatures[ep]:.2f}")
+
+            state, info = env.reset()
+            action = select_action_fn(state)
+
+            # Iterate until the end of the episode
+            while not done:
+                next_state, reward, done, _ = env.step(action)
+                next_action = select_action_fn(next_state)
+
+                # SARSA update of the Q-table
+                td_target = reward + self.gamma * self.q_table[next_state][next_action] * (not done)
+                td_error = td_target - self.q_table[state][action]
+                self.q_table[state][action] += self.alphas[ep] * td_error
+
+                # Update the action and the state for the next iteration
+                state, action = next_state, next_action
+
+        # Compute the V-function and thr policy corrisponding to the final Q-table
+        self.v_function = np.max(self.q_table, axis=1)
+        self.final_policy = np.argmax(self.q_table, axis=1)
 
     def run_q_learning_agent(self, env, Q_star, V_star):
         """

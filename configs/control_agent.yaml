@@ -9,8 +9,7 @@ seed: 42
 
 init_alpha: 0.5
 min_alpha: 0.01
-alpha_decay_steps: 4000
-alpha_decay_rate: 0.999
+alpha_decay_rate: 0.99890
 alpha_decay_law: "exponential" # ["linear", "exponential", "logarithmic"] 
 
 gamma: 0.99
@@ -22,20 +21,21 @@ theta: 1e-8 # Convergence threshold for value iteration (planning engine)
 mc_control_params:
   first_visit: True
 
+sarsa_params:
+  init_epsilon: 1.0
+
 policy: "epsilon_greedy" # ["epsilon_greedy", "softmax", "ucb", "thompson_sampling"]
 
 epsilon_greedy_params:
   init_epsilon: 1.0
-  min_epsilon: 0.1
-  decay_steps: 4000
-  decay_rate: 0.999423 # 0.999424 
+  min_epsilon: 0.05
+  decay_rate: 0.99915 
   decay_law: "exponential" # ["linear", "exponential", "logarithmic"]
 
 softmax_params:
   init_temperature: 1.0
   min_temperature: 0.01
-  decay_steps: 3500
-  decay_rate: 0.9985
+  decay_rate: 0.99870
   decay_law: "exponential" # ["linear", "exponential", "logarithmic"]
 
 ucb_params:

@@ -23,7 +23,6 @@ value_agent_params:
   algorithm_name: "td_lambda" # ["td_lambda", "td_lambda"]
   init_alpha: 0.5
   min_alpha: 0.01
-  decay_steps: 4000
   decay_rate: 0.999
   decay_law: "exponential" # ["linear", "exponential", "logarithmic"] 
   gamma: 0.99

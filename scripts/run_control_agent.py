@@ -20,15 +20,15 @@ def run_control_agent(config):
         config (dict): A dictionary containing the configuration parameters for the environment and agent.
     """
     # Taxi environment initialization
-    env = gym.make(
-        config["env_name"], 
-        is_rainy=config["is_rainy"], 
-        rainy_probability=config["rainy_probability"], 
-        fickle_passenger=config["fickle_passenger"], 
-        fickle_probability=config["fickle_probability"], 
-        render_mode=config["render_mode"]
-    )
-    # env = gym.make("FrozenLake-v1", is_slippery=False, render_mode=config["render_mode"])
+    # env = gym.make(
+    #     config["env_name"], 
+    #     is_rainy=config["is_rainy"], 
+    #     rainy_probability=config["rainy_probability"], 
+    #     fickle_passenger=config["fickle_passenger"], 
+    #     fickle_probability=config["fickle_probability"], 
+    #     render_mode=config["render_mode"]
+    # )
+    env = gym.make("FrozenLake-v1", is_slippery=False, render_mode=config["render_mode"])
 
     # Computing the optimal Q-table and the corresponding optimal V-function
     V_star = compute_optimal_v_function(env, gamma=config["gamma"], theta=float(config["theta"]))
@@ -78,6 +78,7 @@ def run_control_agent(config):
         
         # Overlay the learning rate (Alpha) decay schedule onto the same plot
         ax_decay.plot(range(len(agent.alphas)), agent.alphas, color='purple', linestyle='--', label="Alpha (Learning Rate)")
+        ax_decay.plot(range(len(agent.discounts)), agent.discounts, color='green', linestyle='-.', label="Gamma (Discounts)")
         ax_decay.legend()
             
         plot_avg_cumulative_reward(ax_reward, running_average_rewards, title="Average Cumulative Reward", env=env, theoretical_return=max_possible_reward, asymptote_label="Optimal Expected Reward")
