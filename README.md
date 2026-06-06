@@ -96,7 +96,7 @@ python scripts/run_policy_agent.py --config configs/policy_agent.yaml
 
 ### Value Agent
 
-The **Value Agent** learns state-value or action-value functions using temporal difference learning and Q-learning algorithms.
+The **Value Agent** estimate the state-value function of the environment by using temporal difference learning algorithms on a specific policy.
 
 #### Running the Value Agent
 
@@ -104,6 +104,28 @@ The **Value Agent** learns state-value or action-value functions using temporal 
 set PYTHONPATH=C:\Users\chris\Desktop\Projects\DeepReinforcementLearning\drl-playground
 python scripts/run_value_agent.py --config configs/value_agent.yaml
 ```
+
+#### Results on Cliff Walking Non Slippery
+
+**Temporal Difference 0**
+
+![Temporal-Difference-Zero Non Slippery](images/value/cliff_walking_non_slippery_td_0.png)
+
+
+**Temporal Difference Lambda**
+
+![Temporal-Difference-Lambda](images/value/cliff_walking_non_slippery_td_lambda.png)
+
+#### Results on Cliff Walking Slippery
+
+**Temporal Difference 0**
+
+![Temporal-Difference-Zero Non Slippery](images/value/cliff_walking_slippery_td_0.png)
+
+
+**Temporal Difference Lambda**
+
+![Temporal-Difference-Lambda](images/value/cliff_walking_slippery_td_lambda.png)
 
 ---
 

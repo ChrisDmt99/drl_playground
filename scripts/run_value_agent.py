@@ -8,6 +8,7 @@ from scripts.agents.value_agent import ValuePredictionAgent
 from utils.utils import read_config_params
 from core.policies import policy_evaluation
 from utils.plots import plot_decay_schedule, plot_estimation_error, plot_policy_quiver, plot_value_function_heatmap, plot_avg_cumulative_reward
+from utils.env_utils import get_grid_shape, get_terminal_states, get_goal_states, get_action_names, get_action_vectors, get_special_states
 
 def run_value_control(config):
     """
@@ -16,16 +17,19 @@ def run_value_control(config):
     # FrozenLake environment: initialization
     env = gym.make(config["env_name"], is_slippery=config["is_slippery"], render_mode=config["render_mode"])
 
-    # Compute the list of non-terminal states (i.e., states that are not holes 'H' or goal 'G') for later use in random start state selection
+    # Compute the list of non-terminal states for later use in random start state selection
     non_terminal_states = []
-    desc = env.unwrapped.desc
-    nrows, ncols = desc.shape
-    for r in range(nrows):
-        for c in range(ncols):
-            cell = desc[r, c].decode("utf-8")
-            if cell not in ("H", "G"):
-                state = r * ncols + c
-                non_terminal_states.append(state)
+    num_states = env.observation_space.n
+    for s in range(num_states):  
+        is_terminal = False
+        for action in range(env.action_space.n):
+            transitions = env.unwrapped.P[s][action]
+            for prob, next_s, reward, terminated in transitions:
+                if terminated:
+                    is_terminal = True
+        
+        if not is_terminal:
+            non_terminal_states.append(s)
 
     # Debug
     print(f"Non terminal states: {non_terminal_states}")
@@ -114,18 +118,55 @@ def run_value_control(config):
     # Debug
     print("Training completed!")
 
+    # Get environment info
+    rows, cols = get_grid_shape(env=env)
+    terminal_states = get_terminal_states(env=env)
+    goal_states = get_goal_states(env=env)
+    special_states = get_special_states(env=env)
+    action_names = get_action_names(env=env)
+    action_vectors = get_action_vectors(env=env)
+
     # Plotting results
     theoretical_return = np.mean(v_pi[non_terminal_states])
     fig, axs = plt.subplots(2, 3, figsize=(18, 10))
     plot_estimation_error(axs[0, 0], mae_history, table_name="Predicted V vs V^pi")
     plot_avg_cumulative_reward(axs[0, 1], running_average_rewards, title="Average Discounted Return", env=env, theoretical_return=theoretical_return, asymptote_label="Expected Value of Returns")
     plot_decay_schedule(axs[0, 2], agent.alphas, parameter_name="Alpha")
-    plot_value_function_heatmap(v_pi, axs[1, 0])
-    axs[1, 0].set_title("Policy Iteration Value Function V^pi", fontsize=12, fontweight='bold')
-    plot_value_function_heatmap(agent.v_table, axs[1, 1])
+
+    plot_value_function_heatmap(
+        V=v_pi, 
+        rows=rows, 
+        cols=cols, 
+        terminal_states=terminal_states, 
+        goal_states=goal_states, 
+        special_states=special_states,
+        ax=axs[1, 0]
+    )    
+    axs[1, 0].set_title("Policy Iteration Value Function", fontsize=12, fontweight='bold')
+    
+    plot_value_function_heatmap(
+        V=agent.v_table, 
+        rows=rows, 
+        cols=cols, 
+        terminal_states=terminal_states, 
+        goal_states=goal_states, 
+        special_states=special_states,    
+        ax=axs[1, 1]
+    )    
     axs[1, 1].set_title("Predicted Value Function V^pi", fontsize=12, fontweight='bold') 
-    plot_policy_quiver(agent.v_table, agent.policy, axs[1, 2])
+    
+    plot_policy_quiver(
+        pi=agent.policy, 
+        rows=rows, 
+        cols=cols, 
+        terminal_states=terminal_states, 
+        goal_states=goal_states, 
+        special_states=special_states, 
+        action_vectors=action_vectors, 
+        ax=axs[1, 2]
+    )    
     axs[1, 2].set_title("Evaluated Target Policy Trajectories", fontsize=12, fontweight='bold')
+    
     plt.tight_layout()
     plt.show()
     

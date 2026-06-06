@@ -2,11 +2,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from matplotlib import colormaps
+from matplotlib.colors import ListedColormap, BoundaryNorm
+import matplotlib.colors as mcolors
 
 from typing import List, Any
 from matplotlib.axes import Axes
 
-from utils.utils import get_terminal_states_mask
+# from utils.utils import get_terminal_states_mask
 
 def plot_avg_cumulative_reward(ax: Axes, running_average_rewards: List[float], title:str, env: Any, theoretical_return: float, asymptote_label: str) -> None:
     """
@@ -60,103 +62,225 @@ def plot_decay_schedule(ax: Axes, schedule: np.ndarray, parameter_name: str = "H
     ax.grid(True, linestyle=":", alpha=0.6)
     ax.legend()
 
-def plot_total_regret(ax: plt.Axes, total_regret_history: list):
-    """
-    Plots the cumulative total regret over political selection episodes.
-    An optimal policy should show a sub-linear growth (logarithmic).
-    
-    Args:
-        ax (matplotlib.axes.Axes): The axes object to plot on.
-        total_regret_history (list): Array containing the historical total sum of regret.
-    """
-    ax.plot(total_regret_history, color="crimson", linewidth=2, label="Total Regret")
-    
-    ax.set_title("Total Cumulative Regret", fontsize=12, fontweight='bold')
-    ax.set_xlabel("Episodes")
-    ax.set_ylabel("Accumulated Regret")
-    ax.grid(True, linestyle="--", alpha=0.6)
-    ax.legend(loc="upper left")
-    
-def plot_value_function_heatmap(V: np.ndarray, ax: plt.Axes):
-    """
-    Plots the reshaped V* state-value function as a heatmap on the given axis.
-    
-    Args:
-        V (numpy.ndarray): The optimal value function V* for each state.
-        ax (matplotlib.axes.Axes): The axes object to plot on.
-    """
-    mask, side = get_terminal_states_mask(len(V))
-    V_grid = V.reshape(side, side)
-    
-    sns.heatmap(V_grid, annot=False, cmap=colormaps["YlGnBu"], cbar=True, ax=ax,
-                square=True, cbar_kws={'label': 'Value'})
+def plot_q_function_heatmap(
+    Q: np.ndarray,
+    ax: plt.Axes,
+    action_names: list[str] | None = None,
+    terminal_states: list[int] | None = None,
+    goal_states: list[int] | None = None,
+    special_states: list[int] | None = None,
+):
+    n_states, n_actions = Q.shape
+    terminal_states = set(terminal_states or [])
+    goal_states = set(goal_states or [])
+    special_states = set(special_states or [])
 
-    for r in range(side):
-        for c in range(side):
-            if mask[r, c]:
-                ax.text(c + 0.5, r + 0.5, f"{V_grid[r, c]:.3f}", color="black",
-                        ha="center", va="center", fontsize=9)
-            else:
-                label = "G" if (r == side - 1 and c == side - 1) else "H"
-                ax.text(c + 0.5, r + 0.5, f"[{label}]", color="crimson", 
-                        ha="center", va="center", fontweight="bold", fontsize=10)
+    if action_names is None:
+        action_names = ["↑", "→", "↓", "←"]
 
-    ax.set_title("Optimal Value Function V*", fontsize=12, fontweight='bold')
+    # Esclusione stati speciali
+    all_special = terminal_states | goal_states | special_states
+    mask = np.ones(Q.shape, dtype=bool)
+    for s in all_special:
+        mask[s, :] = False
+    
+    # FILTRO: Escludiamo ostacoli (<= -100) e azioni nulle (valori vicini allo zero)
+    # np.abs(Q) > 1e-3 impedisce agli zeri di schiacciare la scala
+    valid_mask = mask & (Q > -100) & (np.abs(Q) > 1e-3)
+    valid_Q = Q[valid_mask]
+    
+    vmin = np.min(valid_Q) if valid_Q.size > 0 else 0
+    vmax = np.max(Q) if Q.size > 0 else 1
 
-def plot_q_function_heatmap(Q: np.ndarray, ax: plt.Axes):
-    """
-    Plots the full Q*(s, a) matrix as a detailed state-action heatmap.
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    cmap = plt.get_cmap("YlGnBu").copy()
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    plt.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
     
-    Args:
-        Q (numpy.ndarray): The Q-value matrix.
-        ax (matplotlib.axes.Axes): The axes object to plot on.
-    """
-    sns.heatmap(Q, annot=True, fmt=".3f", cmap=colormaps["magma"], cbar=True, ax=ax,
-                xticklabels=["Left (0)", "Down (1)", "Right (2)", "Up (3)"],
-                yticklabels=[f"S {i}" for i in range(len(Q))])
+    grid_colors = cmap(norm(Q))
     
-    ax.set_title("Optimal Action-Value Function Q*(s, a)", fontsize=12, fontweight='bold')
+    # Impostiamo colore neutro (grigio chiaro) per le azioni con valore ~0
+    zero_mask = (np.abs(Q) <= 1e-3)
+    grid_colors[zero_mask] = [0.95, 0.95, 0.95, 1.0]
+
+    # Sovrascriviamo gli stati speciali
+    colors = {
+        'T': mcolors.to_rgba("#d9d9d9"),
+        'S': mcolors.to_rgba("#8d6e63"),
+        'G': mcolors.to_rgba("#4caf50")
+    }
+
+    for s in range(n_states):
+        if s in terminal_states: grid_colors[s, :] = colors['T']
+        elif s in goal_states: grid_colors[s, :] = colors['G']
+        elif s in special_states: grid_colors[s, :] = colors['S']
+
+    ax.imshow(grid_colors, aspect='auto')
+
+    for r in range(n_states):
+        for c in range(n_actions):
+            if r in goal_states: text = "[G]"
+            elif r in special_states: text = "[S]"
+            elif r in terminal_states: text = "[T]"
+            else: text = f"{Q[r, c]:.2f}"
+            ax.text(c, r, text, ha="center", va="center", color="black", fontsize=8, fontweight="bold")
+
+    for spine in ax.spines.values(): spine.set_visible(False)
+    ax.set_xticks(np.arange(n_actions))
+    ax.set_xticklabels(action_names)
+    ax.set_yticks(np.arange(n_states))
+    ax.set_yticklabels([f"S{i}" for i in range(n_states)])
+    ax.set_title("Action-Value Function Q(s,a)", fontweight="bold")
     ax.set_xlabel("Actions")
     ax.set_ylabel("States")
+    ax.grid(False)
 
-def plot_policy_quiver(V: np.ndarray, pi: np.ndarray, ax: plt.Axes):
+def plot_value_function_heatmap(
+    V: np.ndarray,
+    rows: int,
+    cols: int,
+    ax: plt.Axes,
+    terminal_states: list[int] | None = None,
+    goal_states: list[int] | None = None,
+    special_states: list[int] | None = None,
+):
+    terminal_states = set(terminal_states or [])
+    goal_states = set(goal_states or [])
+    special_states = set(special_states or [])
+
+    #### Esclude terminal_states, goal_states and special_states
+    V_grid = V.reshape(rows, cols)
+    
+    # Creiamo una maschera per escludere gli stati speciali dal calcolo di vmin/vmax
+    all_special = terminal_states | goal_states | special_states
+    mask = np.ones(V.shape, dtype=bool)
+    for s in all_special:
+        mask[s] = False
+    
+    # Filtriamo i valori validi: non speciali e non ostacoli (>-100)
+    valid_mask = mask & (V > -100)
+    valid_V = V[valid_mask]
+    
+    vmin = np.min(valid_V) if valid_V.size > 0 else 0
+    vmax = np.max(valid_V) if valid_V.size > 0 else 1
+    
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    cmap = plt.get_cmap("YlGnBu").copy()
+
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    plt.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+
+    grid_colors = cmap(norm(V_grid))
+    colors = {
+        'T': mcolors.to_rgba("#d9d9d9"),
+        'S': mcolors.to_rgba("#8d6e63"),
+        'G': mcolors.to_rgba("#4caf50")
+    }
+
+    for r in range(rows):
+        for c in range(cols):
+            s = r * cols + c
+            if s in terminal_states: grid_colors[r, c] = colors['T']
+            elif s in goal_states: grid_colors[r, c] = colors['G']
+            elif s in special_states: grid_colors[r, c] = colors['S']
+
+    ax.imshow(grid_colors)
+    for r in range(rows):
+        for c in range(cols):
+            s = r * cols + c
+            if s in goal_states: text = "[G]"
+            elif s in special_states: text = "[S]"
+            elif s in terminal_states: text = "[T]"
+            else: text = f"{V_grid[r, c]:.2f}"
+            ax.text(c, r, text, ha="center", va="center", color="black", fontsize=9, fontweight="bold")
+
+    for spine in ax.spines.values(): spine.set_visible(False)
+    ax.set_xticks(np.arange(cols))
+    ax.set_yticks(np.arange(rows))
+    ax.set_title("State-Value Function V(s)", fontweight="bold")
+    ax.grid(False)
+
+def plot_policy_quiver(
+    pi: np.ndarray, 
+    rows: int,
+    cols: int,
+    ax: plt.Axes,
+    action_vectors: dict[int, tuple[float, float]] | None = None,
+    terminal_states: list[int] | None = None,
+    goal_states: list[int] | None = None,
+    special_states: dict[int, str] | None = None,
+):
     """
-    Plots decision vectors (arrows) of pi* mapped over the V* background.
-    
-    Args:
-        V (numpy.ndarray): The optimal value function V* for each state.
-        pi (numpy.ndarray): The optimal policy pi* for each state.
-        ax (matplotlib.axes.Axes): The axes object to plot on.
+    Generic GridWorld policy visualization (uniform color for normal states).
     """
-    mask, side = get_terminal_states_mask(len(V))
-    V_grid = V.reshape(side, side)
-    pi_grid = pi.reshape(side, side)
+    terminal_states = set(terminal_states or [])
+    goal_states = set(goal_states or [])
+    special_states = special_states or {}
+
+    if action_vectors is None:
+        action_vectors = {0: (-1.0, 0.0), 1: (0.0, 1.0), 2: (1.0, 0.0), 3: (0.0, -1.0)}
+
+    # Griglia base: 0.0 per celle normali
+    grid = np.zeros((rows, cols))
     
-    # Direction mappings for actions
-    # Azioni originali: 0=Left, 1=Down, 2=Right, 3=Up
-    dx_map = {0: -1.0, 1: 0.0, 2: 1.0, 3: 0.0}
-    dy_map = {0: 0.0, 1: 1.0, 2: 0.0, 3: -1.0}  # Inverted for image coordinates (Y increases downward)
+    # Valori sentinella fuori dal range [-0.5, 0.5]
+    T_VAL, G_VAL = -1.0, 1.0
     
-    # Draw heatmap background
-    sns.heatmap(V_grid, annot=False, cmap=colormaps["Blues"], cbar=False, ax=ax, square=True)
+    for s in range(rows * cols):
+        r, c = divmod(s, cols)
+        if s in terminal_states: 
+            grid[r, c] = T_VAL
+        elif s in goal_states: 
+            grid[r, c] = G_VAL
+        elif s in special_states: 
+            grid[r, c] = np.nan  
+
+    # 3. Configurazione Colormap
+    cmap = plt.get_cmap("Blues").copy()
+    cmap.set_under("#d9d9d9") 
+    cmap.set_over("#4caf50")  
+    cmap.set_bad("#8d6e63")   
     
-    # Plot arrows for each state
-    for r in range(side):
-        for c in range(side):
-            if mask[r, c]:  # Only plot for non-terminal states
-                action = int(pi_grid[r, c])
-                dx = dx_map[action]
-                dy = dy_map[action]
-                x, y = c + 0.5, r + 0.5
+    sns.heatmap(
+        grid,
+        cmap=cmap,
+        vmin=-0.5, 
+        vmax=0.5,
+        annot=False,
+        square=True,
+        cbar=False,
+        ax=ax
+    )
+
+    # Disegno testi e frecce
+    for s in range(rows * cols):
+        r, c = divmod(s, cols)
+        x, y = c + 0.5, r + 0.5
+
+        if s in goal_states:
+            ax.text(x, y, "[G]", ha="center", va="center", fontweight="bold", color="black")
+        elif s in special_states:
+            ax.text(x, y, "[S]", ha="center", va="center", fontweight="bold", color="black")
+        elif s in terminal_states:
+            ax.text(x, y, "[T]", ha="center", va="center", fontweight="bold", color="black")
+        else:
+            action = int(pi[s])
+            if action in action_vectors:
+                dx, dy = action_vectors[action]
                 ax.arrow(x, y, dx * 0.35, dy * 0.35, head_width=0.18, head_length=0.12, 
-                        fc='darkred', ec='darkred', linewidth=2)
-    
-    # Add labels for terminal states
-    for r in range(side):
-        for c in range(side):
-            if not mask[r, c]:
-                label = "G" if (r == side - 1 and c == side - 1) else "H"
-                ax.text(c + 0.5, r + 0.5, f"[{label}]", color='crimson', 
-                        ha='center', va='center', fontweight='bold', fontsize=10)
+                         fc="darkred", ec="darkred", linewidth=2, length_includes_head=True)
 
-    ax.set_title("Optimal Policy pi* Quiver Map (Trajectories)", fontsize=12, fontweight='bold')
+    ax.set_title("Policy Quiver Map", fontsize=12, fontweight="bold")
+    ax.set_xticks(np.arange(cols) + 0.5)
+    ax.set_xticklabels(np.arange(cols))
+    ax.set_yticks(np.arange(rows) + 0.5)
+    ax.set_yticklabels(np.arange(rows))
+    
+    # Rimuovi i bordi esterni ma mantieni i tick
+    for spine in ax.spines.values(): 
+        spine.set_visible(False)
+        
+    ax.tick_params(left=True, bottom=True)

@@ -47,25 +47,3 @@ def compute_alpha_beta(Q, ts_alpha, ts_beta, N, unimodal=True):
         beta = 1 + np.log(1 + np.exp(beta))
 
     return alpha, beta
-
-def get_terminal_states_mask(num_states: int):
-    """
-    Helper function to identify Holes and Goal indices for 4x4 or 8x8 FrozenLake.
-    Returns a 2D boolean mask where False indicates a terminal state.
-    """
-    side = int(np.sqrt(num_states))
-    mask = np.ones((side, side), dtype=bool)
-    
-    if side == 4:
-        # Indices: 5, 7, 11, 12 (Holes) and 15 (Goal)
-        holes_goal = [5, 7, 11, 12, 15]
-    elif side == 8:
-        # Standard indices for 8x8 FrozenLake Holes and Goal
-        holes_goal = [19, 29, 35, 41, 42, 46, 49, 54, 59, 63]
-    else:
-        holes_goal = [num_states - 1] # Fallback solo Goal
-        
-    for idx in holes_goal:
-        r, c = divmod(idx, side)
-        mask[r, c] = False
-    return mask, side

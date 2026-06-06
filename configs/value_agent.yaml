@@ -1,12 +1,26 @@
-env_name: "FrozenLake-v1"
-is_slippery: False
+env_name: "CliffWalking-v1"
+is_slippery: True
 render_mode: "rgb_array" # "human" for visualization, "rgb_array" for headless mode
 episodes: 5000
 seed: 42
-policy: [1, 2, 1, 0, 1, 0, 1, 0, 2, 1, 1, 0, 0, 2, 2, 0] # Optimal policy for the non-slippery frozen lake environment
+# policy: [
+#     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2,
+#     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 
+#     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 
+#     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1
+# ] # Optimal policy for the cliff walking environment non-slippery
+
+policy: [
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+    0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 
+    3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
+] # Optimal policy for the cliff walking environment slippery
+
+# policy: # [1, 2, 1, 0, 1, 0, 1, 0, 2, 1, 1, 0, 0, 2, 2, 0] # Optimal policy for the non-slippery frozen lake environment
 
 value_agent_params:
-  algorithm_name: "td_lambda" # ["td_zero", "td_lambda"]
+  algorithm_name: "td_lambda" # ["td_lambda", "td_lambda"]
   init_alpha: 0.5
   min_alpha: 0.01
   decay_steps: 4000
