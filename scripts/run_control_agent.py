@@ -33,6 +33,7 @@ def run_control_agent(config):
         render_mode=config["render_mode"]
     )
     # env = gym.make("FrozenLake-v1", is_slippery=False, render_mode=config["render_mode"])
+    # env = gym.make("CliffWalking-v1", is_slippery=False, render_mode=config["render_mode"])
 
     # Computing the optimal Q-table and the corresponding optimal V-function
     V_star = compute_optimal_v_function(env, gamma=config["gamma"], theta=float(config["theta"]))

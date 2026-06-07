@@ -93,8 +93,8 @@ class ControlAgent:
             self.c = self.policy_params["c"]
         # Thompson Sampling Policy
         elif self.policy_name == "thompson_sampling":
-            self.alpha = self.policy_params["alpha"]
-            self.beta = self.policy_params["beta"]
+            self.ts_alpha = self.policy_params["alpha"]
+            self.ts_beta = self.policy_params["beta"]
         else:
             raise ValueError(f"Invalid policy name: {self.policy_name}")
 
@@ -131,7 +131,7 @@ class ControlAgent:
         else:
             raise ValueError(f"Invalid decay law: {law}")
 
-    def select_action(self, episode: int, state: int, action_space: gym.Space) -> Tuple[int, str]:
+    def select_action(self, episode: int, q_values: np.ndarray, state: int, action_space: gym.Space) -> Tuple[int, str]:
         """
         Selects an action based on the current policy selection method and the Q-table.
 
@@ -143,8 +143,6 @@ class ControlAgent:
         Returns:
             Tuple[int, str]: A tuple containing the selected action index and the reason string.
         """  
-        q_values = self.q_table[state]
-
         if self.policy_name == "epsilon_greedy":
             return policies.epsilon_greedy_policy(q_values, self.epsilons[episode], action_space, np_random=self.np_random)
         
@@ -157,7 +155,7 @@ class ControlAgent:
             return policies.ucb_policy(q_values, self.c, state_total, self.action_counts[state], np_random=self.np_random)
         
         elif self.policy_name == "thompson_sampling":
-            return policies.thompson_sampling_policy(q_values, self.alpha, self.beta, self.action_counts[state], np_random=self.np_random)
+            return policies.thompson_sampling_policy(q_values, self.ts_alpha, self.ts_beta, self.action_counts[state], np_random=self.np_random)
         
         else:
             raise ValueError("Unsupported policy")
@@ -202,7 +200,7 @@ class ControlAgent:
             
             # Generate trajectory
             trajectory = generate_trajectory(
-                agent_select_action_fn=lambda s: self.select_action(episode=ep, state=s, action_space=env.action_space)[0], 
+                agent_select_action_fn=lambda s: self.select_action(episode=ep, q_values=self.q_table[s], state=s, action_space=env.action_space)[0], 
                 env=env, 
                 max_steps=self.max_steps
             )
@@ -224,7 +222,8 @@ class ControlAgent:
                 initial_state = trajectory[0][0]
                 discounted_episode_reward = np.sum(self.discounts[:traj_len] * all_rewards)
                 episode_regret = V_star[initial_state] - discounted_episode_reward
-                cumulative_regret += max(0.0, episode_regret)
+                # cumulative_regret += max(0.0, episode_regret)
+                cumulative_regret += episode_regret
             self.total_regret_history[ep] = cumulative_regret
 
             # Reset the visited actions-states tracker for First-Visit setup
@@ -250,7 +249,7 @@ class ControlAgent:
                 _return = np.sum(self.discounts[:n_steps] * all_rewards[t:])
 
                 # Update of the Q-table
-                self.q_table[state][action] += self.alphas[ep] * (_return - self.q_table[state][action])
+                self.q_table[state, action] += self.alphas[ep] * (_return - self.q_table[state, action])
             
             # Computing the MAE on the Q-table
             if Q_star is not None:
@@ -285,13 +284,13 @@ class ControlAgent:
             discounted_episode_reward = 0.0
             current_gamma = 1.0
 
-            action, _ = self.select_action(episode=ep, state=state, action_space=env.action_space)
+            action, _ = self.select_action(episode=ep, q_values=self.q_table[state], state=state, action_space=env.action_space)
 
             # Iterate until the end of the episode
             while not done:
                 next_state, reward, terminated, truncated, _ = env.step(action)
                 done = terminated or truncated
-                next_action, _ = self.select_action(episode=ep, state=next_state, action_space=env.action_space)
+                next_action, _ = self.select_action(episode=ep, q_values=self.q_table[next_state], state=next_state, action_space=env.action_space)
 
                 # Reward and discounted return tracking
                 episode_reward += reward
@@ -303,9 +302,9 @@ class ControlAgent:
                 self.action_counts[state, action] += 1
 
                 # SARSA update of the Q-table
-                td_target = reward + self.gamma * self.q_table[next_state][next_action] * (not terminated)
-                td_error = td_target - self.q_table[state][action]
-                self.q_table[state][action] += self.alphas[ep] * td_error
+                td_target = reward + self.gamma * self.q_table[next_state, next_action] * (not terminated)
+                td_error = td_target - self.q_table[state, action]
+                self.q_table[state, action] += self.alphas[ep] * td_error
 
                 # Update the action and the state for the next iteration
                 state, action = next_state, next_action
@@ -313,7 +312,8 @@ class ControlAgent:
             # Compute of the total regret based on initial state and discounted return
             if V_star is not None:
                 episode_regret = V_star[initial_state] - discounted_episode_reward
-                cumulative_regret += max(0.0, episode_regret)
+                # cumulative_regret += max(0.0, episode_regret)
+                cumulative_regret += episode_regret
             self.total_regret_history[ep] = cumulative_regret
 
             # Computing the running average reward via continuous tracking optimization
@@ -338,7 +338,7 @@ class ControlAgent:
         # Training loop parameters
         cumulative_regret = 0.0
         total_rewards_earned = 0.0
-        pbar = tqdm(self.episodes, leave=True, desc="Q Learning Training", unit="episode")
+        pbar = tqdm(self.episodes, leave=True, desc="Q-Learning Training", unit="episode")
         for ep in pbar:
             if self.policy_name == "epsilon_greedy":
                 pbar.set_postfix(epsilon=f"{self.epsilons[ep]:.2f}")
@@ -355,8 +355,8 @@ class ControlAgent:
 
             # Iterate until the end of the episode
             while not done:       
-                # Select action for the CURRENT state (Off-policy flavor)         
-                action, _ = self.select_action(episode=ep, state=state, action_space=env.action_space)
+                # Select action for the current state (Off-policy flavor)         
+                action, _ = self.select_action(episode=ep, q_values=self.q_table[state], state=state, action_space=env.action_space)
 
                 # Environment step
                 next_state, reward, terminated, truncated, _ = env.step(action)
@@ -373,8 +373,8 @@ class ControlAgent:
                 
                 # Q-learning update of the Q-table
                 td_target = reward + self.gamma * self.q_table[next_state].max() * (not terminated)
-                td_error = td_target - self.q_table[state][action]
-                self.q_table[state][action] += self.alphas[ep] * td_error
+                td_error = td_target - self.q_table[state, action]
+                self.q_table[state, action] += self.alphas[ep] * td_error
 
                 # Update the state for the next iteration
                 state = next_state
@@ -382,7 +382,8 @@ class ControlAgent:
             # Compute of the total regret based on initial state and discounted return
             if V_star is not None:
                 episode_regret = V_star[initial_state] - discounted_episode_reward
-                cumulative_regret += max(0.0, episode_regret)
+                # cumulative_regret += max(0.0, episode_regret)
+                cumulative_regret += episode_regret
             self.total_regret_history[ep] = cumulative_regret
 
             # Computing the running average reward via continuous tracking optimization
@@ -404,31 +405,89 @@ class ControlAgent:
         """
         Trains the agent using the Off-Policy Double Q-Learning algorithm.
         """
-        # Q1 = np.zeros((nS, nA), dtype=np.float64)
-        # Q2 = np.zeros((nS, nA), dtype=np.float64)
-        # for e in tqdm(self.n_episodes, leave=False):
-        #     state, done = env.reset(), False
-        #     while not done:
-        #         action = select_action(state, (Q1 + Q2)/2, epsilons[e])
-        #         next_state, reward, done, _ = env.step(action)
+        # Initialize the Q-tables Q1 and Q2
+        Q1 = np.zeros((self.num_states, self.num_actions), dtype=np.float64)
+        Q2 = np.zeros((self.num_states, self.num_actions), dtype=np.float64)
 
-        #         if np.random.randint(2):
-        #             argmax_Q1 = np.argmax(Q1[next_state])
-        #             td_target = reward + gamma * Q2[next_state][argmax_Q1] * (not done)
-        #             td_error = td_target - Q1[state][action]
-        #             Q1[state][action] = Q1[state][action] + alphas[e] * td_error
-        #         else:
-        #             argmax_Q2 = np.argmax(Q2[next_state])
-        #             td_target = reward + gamma * Q1[next_state][argmax_Q2] * (not done)
-        #             td_error = td_target - Q2[state][action]
-        #             Q2[state][action] = Q2[state][action] + alphas[e] * td_error
-        #         state = next_state
+        # Training loop parameters
+        cumulative_regret = 0.0
+        total_rewards_earned = 0.0
+        pbar = tqdm(self.episodes, leave=True, desc="Double Q-Learning Training", unit="episode")
+        for ep in pbar:
+            if self.policy_name == "epsilon_greedy":
+                pbar.set_postfix(epsilon=f"{self.epsilons[ep]:.2f}")
+            elif self.policy_name == "softmax":
+                pbar.set_postfix(temperature=f"{self.temperatures[ep]:.2f}")
 
-        #     Q_track1[e] = Q1
-        #     Q_track2[e] = Q2        
-        #     pi_track.append(np.argmax((Q1 + Q2)/2, axis=1))
+            state, _ = env.reset()
+            initial_state = state
+            done = False
 
-        # Q = (Q1 + Q2)/2.
-        # V = np.max(Q, axis=1)    
-        # pi = lambda s: {s:a for s, a in enumerate(np.argmax(Q, axis=1))}[s]
-        # return Q, V, pi, (Q_track1 + Q_track2)/2., pi_track
+            episode_reward = 0.0
+            discounted_episode_reward = 0.0
+            current_gamma = 1.0
+
+            # Iterate until the end of the episode
+            while not done:
+                # Select action for the current state (Off-policy flavor)         
+                action, _ = self.select_action(episode=ep, q_values=(Q1[state]+Q2[state])*0.5, state=state, action_space=env.action_space)
+
+                # Environment step
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                done = terminated or truncated
+
+                # DEBUG
+                if terminated:
+                    print("Terminated")
+                if truncated:
+                    print("Truncated")
+
+                # Reward and discounted return tracking
+                episode_reward += reward
+                discounted_episode_reward += current_gamma * reward
+                current_gamma *= self.gamma
+
+                # Updated exploration counters for UCB and Thompson Sampling 
+                self.state_count[state] += 1
+                self.action_counts[state, action] += 1
+
+                # Q-learning update of the Q-table
+                if np.random.rand() < 0.5:
+                    argmax_Q1 = np.argmax(Q1[next_state])
+                    td_target = reward + self.gamma * Q2[next_state, argmax_Q1] * (not terminated)
+                    td_error = td_target - Q1[state, action]
+                    Q1[state, action] += self.alphas[ep] * td_error
+
+                else:
+                    argmax_Q2 = np.argmax(Q2[next_state])
+                    td_target = reward + self.gamma * Q1[next_state, argmax_Q2] * (not terminated)
+                    td_error = td_target - Q2[state, action]
+                    Q2[state, action] += self.alphas[ep] * td_error
+
+                # Update the state for the next iteration
+                state = next_state
+
+            # Update the Q-table as the mean of Q1 and Q2
+            self.q_table = (Q1 + Q2) / 2.0
+
+            # Compute of the total regret based on initial state and discounted return
+            if V_star is not None:
+                episode_regret = V_star[initial_state] - discounted_episode_reward
+                # cumulative_regret += max(0.0, episode_regret)
+                cumulative_regret += episode_regret
+            self.total_regret_history[ep] = cumulative_regret
+
+            # Computing the running average reward via continuous tracking optimization
+            self.rewards_history[ep] = episode_reward
+            total_rewards_earned += episode_reward
+            self.running_average_rewards[ep] = total_rewards_earned / (ep + 1)
+
+            # Computing the MAE on the Q-table
+            if Q_star is not None:
+                self.mae_history[ep] = float(np.mean(np.abs(Q_star - self.q_table)))
+            else:
+                self.mae_history[ep] = float(0.0)
+
+        # Compute the V-function and the policy corresponding to the final Q-table
+        self.v_function = np.max(self.q_table, axis=1)
+        self.final_policy = np.argmax(self.q_table, axis=1)
