@@ -103,7 +103,7 @@ class ValuePredictionAgent:
         """
         self.eligibility_traces = np.zeros(self.num_states, dtype=np.float64)
 
-    def update_value_function(self, episode: int, reward: float, state: int, next_state: int, done: bool) -> None:
+    def update_value_function(self, episode: int, reward: float, state: int, next_state: int, terminated: bool) -> None:
         """
         This method can be used to perform any necessary updates to the value function at the end of each episode, such as decaying the learning rate or resetting eligibility traces.
 
@@ -112,7 +112,7 @@ class ValuePredictionAgent:
             reward (float): The reward received for taking the action in the current state.
             state (int): The current state of the environment.
             next_state (int): The next state of the environment after taking the action.
-            done (bool): Whether the episode has ended after taking the action.
+            terminated (bool): Whether the episode has ended after taking the action.
         """
         if self.algorithm_name == "td_zero":
             self.v_table = update_td_zero(
@@ -123,7 +123,7 @@ class ValuePredictionAgent:
                 next_state=next_state, 
                 reward=reward, 
                 gamma=self.gamma, 
-                done=done
+                terminated=terminated
             )
 
         elif self.algorithm_name == "td_lambda":
@@ -137,7 +137,7 @@ class ValuePredictionAgent:
                 reward=reward, 
                 gamma=self.gamma, 
                 lambda_=self._lambda, 
-                done=done
+                terminated=terminated
             )
 
         else:

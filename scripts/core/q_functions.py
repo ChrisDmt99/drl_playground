@@ -26,8 +26,7 @@ def compute_optimal_q_function(env: Any, gamma: float, theta: float) -> np.ndarr
                 q_old = Q[s, a]
                 q_buffer = 0.0
                 for prob, next_state, reward, done in P[s][a]:
-                    q_next = 0.0 if done else Q[next_state, :].max()
-                    q_buffer += prob * (reward + gamma * q_next)
+                    q_buffer += prob * (reward + gamma * Q[next_state, :].max() * (not done))
                 Q[s, a] = q_buffer
                 delta = max(delta, abs(q_old - Q[s, a]))
         if delta < theta:

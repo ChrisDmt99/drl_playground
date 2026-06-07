@@ -39,7 +39,7 @@ def update_td_zero(
         next_state: int, 
         reward: float, 
         gamma: float, 
-        done: bool
+        terminated: bool
     ) -> np.ndarray:
     """
     Implementation of pure TD(0): local update O(1).
@@ -52,13 +52,13 @@ def update_td_zero(
         next_state (int): The next state the agent will be in after taking the current action.
         reward (float): The reward received for taking the current action in the current state.
         gamma (float): The discount factor for future rewards.
-        done (bool): Whether the episode has ended.
+        terminated (bool): Whether the episode has ended.
 
     Returns:
         v_table (numpy.ndarray): The updated value table after applying the TD(0) update.
     """
     # Compute the TD target: reward + discounted value of the next state. If the current state is terminal, we don't consider the value of the next state.
-    td_target = reward + gamma * v_table[next_state] * (1 - done)  
+    td_target = reward + (gamma * v_table[next_state] * (not terminated))
 
     # Calculation of TD Error: Target - Current Estimate
     td_error = td_target - v_table[state]
@@ -76,7 +76,7 @@ def update_td_lambda(
     state: int, next_state: int, 
     reward: float, gamma: float, 
     lambda_: float, 
-    done: bool
+    terminated: bool
     ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Implementation of Backward TD(lambda): global update O(S).
@@ -90,14 +90,14 @@ def update_td_lambda(
         reward (float): The reward received for taking the current action in the current state.
         next_state (int): The next state the agent will be in after taking the current action.
         lambda_ (float): The trace decay parameter for TD(lambda).
-        done (bool): Whether the episode has ended.
+        terminated (bool): Whether the episode has ended.
 
     Returns:
         v_table (numpy.ndarray): The updated value table after applying the TD(lambda) update.
         eligibility_traces (numpy.ndarray): The updated eligibility traces after applying the TD(lambda) update.
     """
     # Compute the TD target: reward + discounted value of the next state. If the current state is terminal, we don't consider the value of the next state.
-    td_target = reward + gamma * v_table[next_state] * (1.0 - float(done))  
+    td_target = reward + (gamma * v_table[next_state] * (not terminated))
 
     # Calculation of TD Error: Target - Current Estimate
     td_error = td_target - v_table[state]

@@ -11,6 +11,10 @@ from utils.plots import plot_avg_cumulative_reward, plot_decay_schedule, plot_es
 from core.value_functions import compute_optimal_v_function
 from core.policies import compute_optimal_policy
 from core.q_functions import compute_optimal_q_function
+from utils.env_utils import compute_taxi_env_spatial_metrics
+from utils.plots import plot_value_function_heatmap, plot_q_function_heatmap, plot_policy_quiver
+from utils.env_utils import get_grid_shape, get_terminal_states, get_goal_states, get_action_names, get_action_vectors, get_special_states
+
 
 def run_control_agent(config):
     """
@@ -20,15 +24,15 @@ def run_control_agent(config):
         config (dict): A dictionary containing the configuration parameters for the environment and agent.
     """
     # Taxi environment initialization
-    # env = gym.make(
-    #     config["env_name"], 
-    #     is_rainy=config["is_rainy"], 
-    #     rainy_probability=config["rainy_probability"], 
-    #     fickle_passenger=config["fickle_passenger"], 
-    #     fickle_probability=config["fickle_probability"], 
-    #     render_mode=config["render_mode"]
-    # )
-    env = gym.make("FrozenLake-v1", is_slippery=False, render_mode=config["render_mode"])
+    env = gym.make(
+        config["env_name"], 
+        is_rainy=config["is_rainy"], 
+        rainy_probability=config["rainy_probability"], 
+        fickle_passenger=config["fickle_passenger"], 
+        fickle_probability=config["fickle_probability"], 
+        render_mode=config["render_mode"]
+    )
+    # env = gym.make("FrozenLake-v1", is_slippery=False, render_mode=config["render_mode"])
 
     # Computing the optimal Q-table and the corresponding optimal V-function
     V_star = compute_optimal_v_function(env, gamma=config["gamma"], theta=float(config["theta"]))
@@ -44,18 +48,13 @@ def run_control_agent(config):
     )
 
     # Compute the maximum possible reward for regret calculation
-    max_possible_reward = float(np.mean(V_star))
+    max_possible_reward = float(V_star[0])
 
     # Training loop
     agent.run(env=env, Q_star=Q_star, V_star=V_star)
 
     # Debug
     print("Training completed!")
-
-    # Lists to track metrics for plotting over time
-    mae_history = agent.mae_history
-    running_average_rewards = agent.running_average_rewards
-    total_regret_history = agent.total_regret_history   
 
     # Set seaborn theme for a clean and professional plot style
     sns.set_theme(style="whitegrid")
@@ -68,7 +67,7 @@ def run_control_agent(config):
         ax_reward = plt.subplot2grid((2, 2), (1, 0))
         ax_regret = plt.subplot2grid((2, 2), (1, 1)) 
         
-        plot_estimation_error(ax_error, mae_history, table_name="Q-Table")
+        plot_estimation_error(ax_error, agent.mae_history, table_name="Q-Table")
         
         # Plot parameter decay schedules (Epsilon/Temperature)
         if agent.policy_name == "epsilon_greedy":
@@ -78,11 +77,10 @@ def run_control_agent(config):
         
         # Overlay the learning rate (Alpha) decay schedule onto the same plot
         ax_decay.plot(range(len(agent.alphas)), agent.alphas, color='purple', linestyle='--', label="Alpha (Learning Rate)")
-        ax_decay.plot(range(len(agent.discounts)), agent.discounts, color='green', linestyle='-.', label="Gamma (Discounts)")
         ax_decay.legend()
             
-        plot_avg_cumulative_reward(ax_reward, running_average_rewards, title="Average Cumulative Reward", env=env, theoretical_return=max_possible_reward, asymptote_label="Optimal Expected Reward")
-        plot_total_regret(ax_regret, total_regret_history)
+        plot_avg_cumulative_reward(ax_reward, agent.running_average_rewards, title="Average Cumulative Reward", env=env, theoretical_return=max_possible_reward, asymptote_label="Optimal Expected Reward")
+        plot_total_regret(ax_regret, agent.total_regret_history)
         
         plt.suptitle(f"Training Analysis - Policy: {agent.policy_name}", fontsize=16, fontweight='bold')
         plt.tight_layout()
@@ -93,72 +91,93 @@ def run_control_agent(config):
         ax_regret = plt.subplot2grid((2, 2), (0, 1))
         ax_reward = plt.subplot2grid((2, 2), (1, 0), colspan=2)
         
-        plot_estimation_error(ax_error, mae_history, table_name="Q-Table")
-        plot_total_regret(ax_regret, total_regret_history)
-        plot_avg_cumulative_reward(ax_reward, running_average_rewards, title="Average Cumulative Reward", env=env, theoretical_return=max_possible_reward, asymptote_label="Optimal Expected Reward")
+        plot_estimation_error(ax_error, agent.mae_history, table_name="Q-Table")
+        plot_total_regret(ax_regret, agent.total_regret_history)
+        plot_avg_cumulative_reward(ax_reward, agent.running_average_rewards, title="Average Cumulative Reward", env=env, theoretical_return=max_possible_reward, asymptote_label="Optimal Expected Reward")
         
         plt.suptitle(f"Training Analysis - Policy: {agent.policy_name}", fontsize=16, fontweight='bold')
         plt.tight_layout()
         plt.show()
 
     # 2. FINAL SPATIAL HEATMAPS GENERATION (5x5 GRID REDUCTION)
-    print("Generating Final Spatial Heatmaps (5x5 Grid reduction)...")
-    
-    # Initialize 5x5 matrices representing the physical Taxi map coordinates
-    v_spatial = np.zeros((5, 5), dtype=np.float32)
-    q_spatial = np.zeros((5, 5), dtype=np.float32)
-    visits_spatial = np.zeros((5, 5), dtype=np.float32)
-    policy_spatial = np.zeros((5, 5), dtype=np.float32)
-    state_counts = np.zeros((5, 5), dtype=np.float32)
+    if config["env_name"] == "Taxi-v4":
+        v_spatial, q_spatial, visits_spatial, policy_spatial = compute_taxi_env_spatial_metrics(env=env, v_function=agent.v_function, q_table=agent.q_table, state_count=agent.state_count, final_policy=agent.final_policy)
 
-    # Iterate over all 500 environment states to decode and aggregate them spatially
-    for state in range(env.observation_space.n):
-        # unwrap and decode extract: (taxi_row, taxi_col, passenger_location, destination)
-        taxi_row, taxi_col, _, _ = env.unwrapped.decode(state)
+        # Create the figure subplots for the 4 final state heatmaps
+        fig_heat, axs = plt.subplots(2, 2, figsize=(14, 12))
         
-        v_spatial[taxi_row, taxi_col] += agent.v_function[state]
-        q_spatial[taxi_row, taxi_col] += np.mean(agent.q_table[state]) # Average Q-values of actions at this grid position
-        visits_spatial[taxi_row, taxi_col] += agent.state_count[state]
-        policy_spatial[taxi_row, taxi_col] += agent.final_policy[state]
-        state_counts[taxi_row, taxi_col] += 1.0
+        # Heatmap 1: Final V-Function
+        sns.heatmap(v_spatial, annot=True, fmt=".2f", cmap="YlGnBu", ax=axs[0, 0], cbar_kws={'label': 'Value'})
+        axs[0, 0].set_title("Spatial Heatmap of Final V-Function ($V$)", fontsize=12, fontweight='bold')
+        axs[0, 0].set_xlabel("Taxi Column (X)")
+        axs[0, 0].set_ylabel("Taxi Row (Y)")
 
-    # Compute the average value per grid cell to eliminate passenger/destination combination bias
-    v_spatial /= state_counts
-    q_spatial /= state_counts
-    # For the policy mapping, round to the most predominant action chosen in that physical cell
-    policy_spatial = np.round(policy_spatial / state_counts).astype(np.int32)
+        # Heatmap 2: Final Q-Table (Aggregated Mean Value of Actions)
+        sns.heatmap(q_spatial, annot=True, fmt=".2f", cmap="magma", ax=axs[0, 1], cbar_kws={'label': 'Q-Value'})
+        axs[0, 1].set_title("Spatial Heatmap of Average Q-Table Values", fontsize=12, fontweight='bold')
+        axs[0, 1].set_xlabel("Taxi Column (X)")
+        axs[0, 1].set_ylabel("Taxi Row (Y)")
 
-    # Create the figure subplots for the 4 final state heatmaps
-    fig_heat, axs = plt.subplots(2, 2, figsize=(14, 12))
-    
-    # Heatmap 1: Final V-Function
-    sns.heatmap(v_spatial, annot=True, fmt=".2f", cmap="YlGnBu", ax=axs[0, 0], cbar_kws={'label': 'Value'})
-    axs[0, 0].set_title("Spatial Heatmap of Final V-Function ($V$)", fontsize=12, fontweight='bold')
-    axs[0, 0].set_xlabel("Taxi Column (X)")
-    axs[0, 0].set_ylabel("Taxi Row (Y)")
+        # Heatmap 3: State Visit Frequencies (Exploration Pattern)
+        sns.heatmap(visits_spatial, annot=True, fmt=".0f", cmap="Oranges", ax=axs[1, 0], cbar_kws={'label': 'Visits'})
+        axs[1, 0].set_title("Spatial Heatmap of State Visits (Exploration)", fontsize=12, fontweight='bold')
+        axs[1, 0].set_xlabel("Taxi Column (X)")
+        axs[1, 0].set_ylabel("Taxi Row (Y)")
 
-    # Heatmap 2: Final Q-Table (Aggregated Mean Value of Actions)
-    sns.heatmap(q_spatial, annot=True, fmt=".2f", cmap="magma", ax=axs[0, 1], cbar_kws={'label': 'Q-Value'})
-    axs[0, 1].set_title("Spatial Heatmap of Average Q-Table Values", fontsize=12, fontweight='bold')
-    axs[0, 1].set_xlabel("Taxi Column (X)")
-    axs[0, 1].set_ylabel("Taxi Row (Y)")
+        # Heatmap 4: Final Policy
+        # Standard numerical action mapping for Taxi-v3/v4 text annotations
+        sns.heatmap(policy_spatial, annot=True, fmt="d", cmap="coolwarm", cbar=False, ax=axs[1, 1])
+        axs[1, 1].set_title("Map of Predominant Policy Actions ($\pi$)\n(0:South, 1:North, 2:East, 3:West, 4:Pickup, 5:Dropoff)", fontsize=11, fontweight='bold')
+        axs[1, 1].set_xlabel("Taxi Column (X)")
+        axs[1, 1].set_ylabel("Taxi Row (Y)")
 
-    # Heatmap 3: State Visit Frequencies (Exploration Pattern)
-    sns.heatmap(visits_spatial, annot=True, fmt=".0f", cmap="Oranges", ax=axs[1, 0], cbar_kws={'label': 'Visits'})
-    axs[1, 0].set_title("Spatial Heatmap of State Visits (Exploration)", fontsize=12, fontweight='bold')
-    axs[1, 0].set_xlabel("Taxi Column (X)")
-    axs[1, 0].set_ylabel("Taxi Row (Y)")
+        plt.suptitle("Analysis of Final Internal State Aggregated on 5x5 Map", fontsize=16, fontweight='bold', y=0.98)
+        plt.tight_layout()
+        plt.show()
 
-    # Heatmap 4: Final Policy
-    # Standard numerical action mapping for Taxi-v3/v4 text annotations
-    sns.heatmap(policy_spatial, annot=True, fmt="d", cmap="coolwarm", cbar=False, ax=axs[1, 1])
-    axs[1, 1].set_title("Map of Predominant Policy Actions ($\pi$)\n(0:South, 1:North, 2:East, 3:West, 4:Pickup, 5:Dropoff)", fontsize=11, fontweight='bold')
-    axs[1, 1].set_xlabel("Taxi Column (X)")
-    axs[1, 1].set_ylabel("Taxi Row (Y)")
+    else:
+        # Get grid environment info
+        rows, cols = get_grid_shape(env=env)
+        terminal_states = get_terminal_states(env=env)
+        goal_states = get_goal_states(env=env)
+        special_states = get_special_states(env=env)
+        action_names = get_action_names(env=env)
+        action_vectors = get_action_vectors(env=env)
 
-    plt.suptitle("Analysis of Final Internal State Aggregated on 5x5 Map", fontsize=16, fontweight='bold', y=0.98)
-    plt.tight_layout()
-    plt.show()
+        # Plotting results
+        fig = plt.figure(figsize=(16, 11))
+        ax_v_function = plt.subplot2grid((2, 2), (0, 0))
+        ax_q_function = plt.subplot2grid((2, 2), (0, 1))
+        ax_optimal_policy = plt.subplot2grid((2, 2), (1, 0), colspan=2)
+        plot_value_function_heatmap(
+            V=agent.v_function, 
+            rows=rows, 
+            cols=cols, 
+            terminal_states=terminal_states, 
+            goal_states=goal_states, 
+            special_states=special_states, 
+            ax=ax_v_function
+        )
+        plot_q_function_heatmap(
+            Q=agent.q_table, 
+            ax=ax_q_function, 
+            action_names=action_names,
+            terminal_states=terminal_states, 
+            goal_states=goal_states, 
+            special_states=special_states
+        )
+        plot_policy_quiver(
+            pi=agent.final_policy, 
+            rows=rows, 
+            cols=cols, 
+            terminal_states=terminal_states, 
+            goal_states=goal_states, 
+            special_states=special_states, 
+            action_vectors=action_vectors, 
+            ax=ax_optimal_policy
+        )
+        plt.tight_layout()
+        plt.show()
 
     # Close the environment
     env.close()

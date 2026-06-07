@@ -91,7 +91,7 @@ def run_value_agent(config):
             done = terminated or truncated
 
             # Compute the TD update for the value function based on the observed transition (state, action, reward, next_state)
-            agent.update_value_function(episode=ep, reward=reward, state=state, next_state=next_state, done=done)
+            agent.update_value_function(episode=ep, reward=reward, state=state, next_state=next_state, terminated=terminated)
             
             # Update episode return
             episode_return += discount * reward

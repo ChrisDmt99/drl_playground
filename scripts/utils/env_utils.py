@@ -167,3 +167,32 @@ def get_action_vectors(env) -> dict[int, tuple[float, float]] | None:
     raise NotImplementedError(
         f"{env_name} is not a supported grid environment."
     )
+
+def compute_taxi_env_spatial_metrics(env, v_function, q_table, state_count, final_policy):
+    """
+    """
+    # Initialize 5x5 matrices representing the physical Taxi map coordinates
+    v_spatial = np.zeros((5, 5), dtype=np.float32)
+    q_spatial = np.zeros((5, 5), dtype=np.float32)
+    visits_spatial = np.zeros((5, 5), dtype=np.float32)
+    policy_spatial = np.zeros((5, 5), dtype=np.float32)
+    state_counts = np.zeros((5, 5), dtype=np.float32)
+
+    # Iterate over all 500 environment states to decode and aggregate them spatially
+    for state in range(env.observation_space.n):
+        # unwrap and decode extract: (taxi_row, taxi_col, passenger_location, destination)
+        taxi_row, taxi_col, _, _ = env.unwrapped.decode(state)
+        
+        v_spatial[taxi_row, taxi_col] += v_function[state]
+        q_spatial[taxi_row, taxi_col] += np.mean(q_table[state]) # Average Q-values of actions at this grid position
+        visits_spatial[taxi_row, taxi_col] += state_count[state]
+        policy_spatial[taxi_row, taxi_col] += final_policy[state]
+        state_counts[taxi_row, taxi_col] += 1.0
+
+    # Compute the average value per grid cell to eliminate passenger/destination combination bias
+    v_spatial /= state_counts
+    q_spatial /= state_counts
+    # For the policy mapping, round to the most predominant action chosen in that physical cell
+    policy_spatial = np.round(policy_spatial / state_counts).astype(np.int32)
+
+    return v_spatial, q_spatial, visits_spatial, policy_spatial

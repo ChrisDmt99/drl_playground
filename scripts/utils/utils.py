@@ -1,4 +1,4 @@
-from itertools import count
+import gymnasium as gym
 
 import yaml
 import numpy as np
@@ -50,35 +50,68 @@ def compute_alpha_beta(Q, ts_alpha, ts_beta, N, unimodal=True):
 
     return alpha, beta
 
-def generate_trajectory(agent_select_action_fn, env, max_steps):
+def generate_trajectory(agent_select_action_fn, env: gym.Env, max_steps: int, complete_trajectory: bool = False):
     """
+    Generates a single trajectory up to max_steps using pre-allocated numpy arrays.
     
+    Args:
+        agent_select_action_fn (callable): Lambda or function to select an action given a state.
+        env (gym.Env): The Gymnasium environment.
+        max_steps (int): Maximum duration allowed for a single simulation loop.
+        complete_trajectory (bool): 
+            If False, returns the experiences accumulated up to max_steps even if not terminated.
+            If True, resets and retries until a successful termination (done=True) occurs within max_steps.
+
+    Returns:
+        list of tuple: A lightweight list containing tuples of (state, action, reward, next_state, done)
+                       for each transition in the recorded trajectory.
     """    
-    done = False
-    trajectory = []
+    # Memory pre-allocation (Executed only once at the beginning)
+    states = np.zeros(max_steps, dtype=np.int32)
+    actions = np.zeros(max_steps, dtype=np.int32)
+    rewards = np.zeros(max_steps, dtype=np.float32)
+    next_states = np.zeros(max_steps, dtype=np.int32)
+    dones = np.zeros(max_steps, dtype=np.bool_)
+    steps_taken = max_steps 
     
-    # Iterate until the end of the episode
-    while not done:
-        state, info = env.reset()
+    # Main simulation loop
+    while True:
+        state, _ = env.reset()
+        success = False
 
-        # Timestamps
-        for t in count():
-            # Select the action
+        for t in range(max_steps):
+            # Action selection and execution
             action = agent_select_action_fn(state)
-
-            # Do the selected action on the environment
             next_state, reward, terminated, truncated, _ = env.step(action)
             done = terminated or truncated 
 
-            # Append the experience to the trajectory
-            trajectory.append((state, action, reward, next_state, done))
+            # Direct memory write by index (overwrites previous failed attempts, if any)
+            states[t] = state
+            actions[t] = action
+            rewards[t] = reward
+            next_states[t] = next_state
+            dones[t] = done
 
-            # Break if the episode is terminated or if it has reached its maximum duration
-            if done or t >= max_steps - 1:
+            if done:
+                steps_taken = t + 1
+                success = True
                 break
-            
-            # Update the environment state
+
             state = next_state
 
-    return np.array(trajectory, dtype=object)
+        # Dual exit condition check
+        # If complete_trajectory is False, exit immediately (timeout is acceptable)
+        # If complete_trajectory is True, exit only if the episode reached a valid 'done' status
+        if not complete_trajectory or success:
+            break
+
+    # Final safety check on the trajectory length
+    if steps_taken > max_steps:
+        raise RuntimeError("Invalid trajectory length")
+
+    # Return the lightweight list of standard tuples
+    return [
+        (states[i], actions[i], rewards[i], next_states[i], dones[i]) 
+        for i in range(steps_taken)
+    ]
 

@@ -147,7 +147,7 @@ class PolicyAgent:
         else:
             raise ValueError("Unsupported policy")
         
-    def update(self, state: int, action: int, reward: float) -> None:
+    def update(self, state: int, action: int, reward: float, terminated: bool) -> None:
         """
         Updates the Q-table using the incremental average formula. Tracks visits and sample averages for each state-action pair dynamically.
 
