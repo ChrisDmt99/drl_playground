@@ -4,6 +4,7 @@ import numpy as np
 from matplotlib import colormaps
 from matplotlib.colors import ListedColormap, BoundaryNorm
 import matplotlib.colors as mcolors
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from typing import List, Any
 from matplotlib.axes import Axes
@@ -80,75 +81,97 @@ def plot_total_regret(ax: plt.Axes, total_regret_history: list):
     ax.legend(loc="upper left")
 
 def plot_q_function_heatmap(
-    Q: np.ndarray,
-    ax: plt.Axes,
-    action_names: list[str] | None = None,
-    terminal_states: list[int] | None = None,
-    goal_states: list[int] | None = None,
-    special_states: list[int] | None = None,
-):
+        Q: np.ndarray,
+        ax: plt.Axes,
+        action_names: list[str] | None = None,
+        terminal_states: list[int] | None = None,
+        goal_states: list[int] | None = None,
+        special_states: list[int] | None = None,
+        show_text: bool = True,
+    ):
     n_states, n_actions = Q.shape
     terminal_states = set(terminal_states or [])
     goal_states = set(goal_states or [])
     special_states = set(special_states or [])
-
     if action_names is None:
         action_names = ["↑", "→", "↓", "←"]
-
-    # Esclusione stati speciali
     all_special = terminal_states | goal_states | special_states
     mask = np.ones(Q.shape, dtype=bool)
     for s in all_special:
         mask[s, :] = False
-    
-    # FILTRO: Escludiamo ostacoli (<= -100) e azioni nulle (valori vicini allo zero)
-    # np.abs(Q) > 1e-3 impedisce agli zeri di schiacciare la scala
     valid_mask = mask & (Q > -100) & (np.abs(Q) > 1e-3)
     valid_Q = Q[valid_mask]
-    
     vmin = np.min(valid_Q) if valid_Q.size > 0 else 0
     vmax = np.max(Q) if Q.size > 0 else 1
-
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
     cmap = plt.get_cmap("YlGnBu").copy()
-
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
     plt.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
-    
     grid_colors = cmap(norm(Q))
-    
-    # Impostiamo colore neutro (grigio chiaro) per le azioni con valore ~0
     zero_mask = (np.abs(Q) <= 1e-3)
     grid_colors[zero_mask] = [0.95, 0.95, 0.95, 1.0]
-
-    # Sovrascriviamo gli stati speciali
     colors = {
         'T': mcolors.to_rgba("#d9d9d9"),
         'S': mcolors.to_rgba("#8d6e63"),
         'G': mcolors.to_rgba("#4caf50")
     }
-
     for s in range(n_states):
         if s in terminal_states: grid_colors[s, :] = colors['T']
         elif s in goal_states: grid_colors[s, :] = colors['G']
         elif s in special_states: grid_colors[s, :] = colors['S']
-
     ax.imshow(grid_colors, aspect='auto')
 
-    for r in range(n_states):
-        for c in range(n_actions):
-            if r in goal_states: text = "[G]"
-            elif r in special_states: text = "[S]"
-            elif r in terminal_states: text = "[T]"
-            else: text = f"{Q[r, c]:.2f}"
-            ax.text(c, r, text, ha="center", va="center", color="black", fontsize=8, fontweight="bold")
+    # for s in range(n_states):
+    #     if s in terminal_states: grid_colors[s, :, :] = colors['T']
+    #     elif s in goal_states: grid_colors[s, :, :] = colors['G']
+    #     elif s in special_states: grid_colors[s, :, :] = colors['S']
+    # ax.imshow(grid_colors, aspect='auto')
+    # if show_text:
+    #     for r in range(n_states):
+    #         for c in range(n_actions):
+    #             if r in goal_states: text = "[G]"
+    #             elif r in special_states: text = "[S]"
+    #             elif r in terminal_states: text = "[T]"
+    #             else: text = f"{Q[r, c]:.2f}"
+    #             ax.text(c, r, text, ha="center", va="center", color="black", fontsize=8, fontweight="bold")
+    # for spine in ax.spines.values(): spine.set_visible(False)
+    # ax.set_xticks(np.arange(n_actions))
+    # ax.set_xticklabels(action_names)
+    # if n_states <= 30:
+    #     step = 1
+    # else:
+    #     step = max(1, n_states // 15)
+    #     if step > 10:
+    #         step = (step // 10) * 10
+    # ticks_y = np.arange(0, n_states, step)
+    # ax.set_yticks(ticks_y)
+    # ax.set_yticklabels([f"S{i}" for i in ticks_y], fontsize=9)
+    # ax.set_title("Action-Value Function Q(s,a)", fontweight="bold")
+    # ax.set_xlabel("Actions")
+    # ax.set_ylabel("States")
+    # ax.grid(False)
 
+    if show_text:
+        for r in range(n_states):
+            for c in range(n_actions):
+                if r in goal_states: text = "[G]"
+                elif r in special_states: text = "[S]"
+                elif r in terminal_states: text = "[T]"
+                else: text = f"{Q[r, c]:.2f}"
+                ax.text(c, r, text, ha="center", va="center", color="black", fontsize=8, fontweight="bold")
     for spine in ax.spines.values(): spine.set_visible(False)
     ax.set_xticks(np.arange(n_actions))
     ax.set_xticklabels(action_names)
-    ax.set_yticks(np.arange(n_states))
-    ax.set_yticklabels([f"S{i}" for i in range(n_states)])
+    if n_states <= 30:
+        step = 1
+    else:
+        step = max(1, n_states // 15)
+        if step > 10:
+            step = (step // 10) * 10
+    ticks_y = np.arange(0, n_states, step)
+    ax.set_yticks(ticks_y)
+    ax.set_yticklabels([f"S{i}" for i in ticks_y], fontsize=9)
     ax.set_title("Action-Value Function Q(s,a)", fontweight="bold")
     ax.set_xlabel("Actions")
     ax.set_ylabel("States")
@@ -162,10 +185,12 @@ def plot_value_function_heatmap(
     terminal_states: list[int] | None = None,
     goal_states: list[int] | None = None,
     special_states: list[int] | None = None,
+    show_text: bool = True,
 ):
     terminal_states = set(terminal_states or [])
     goal_states = set(goal_states or [])
     special_states = set(special_states or [])
+    n_states = rows
 
     #### Esclude terminal_states, goal_states and special_states
     V_grid = V.reshape(rows, cols)
@@ -204,19 +229,29 @@ def plot_value_function_heatmap(
             elif s in goal_states: grid_colors[r, c] = colors['G']
             elif s in special_states: grid_colors[r, c] = colors['S']
 
-    ax.imshow(grid_colors)
-    for r in range(rows):
-        for c in range(cols):
-            s = r * cols + c
-            if s in goal_states: text = "[G]"
-            elif s in special_states: text = "[S]"
-            elif s in terminal_states: text = "[T]"
-            else: text = f"{V_grid[r, c]:.2f}"
-            ax.text(c, r, text, ha="center", va="center", color="black", fontsize=9, fontweight="bold")
+    ax.imshow(grid_colors, aspect='auto')
+
+    if show_text:
+        for r in range(rows):
+            for c in range(cols):
+                s = r * cols + c
+                if s in goal_states: text = "[G]"
+                elif s in special_states: text = "[S]"
+                elif s in terminal_states: text = "[T]"
+                else: text = f"{V_grid[r, c]:.2f}"
+                ax.text(c, r, text, ha="center", va="center", color="black", fontsize=9, fontweight="bold")
 
     for spine in ax.spines.values(): spine.set_visible(False)
     ax.set_xticks(np.arange(cols))
-    ax.set_yticks(np.arange(rows))
+    if n_states <= 30:
+        step = 1
+    else:
+        step = max(1, n_states // 15)
+        if step > 10:
+            step = (step // 10) * 10
+    ticks_y = np.arange(0, n_states, step)
+    ax.set_yticks(ticks_y)
+    ax.set_yticklabels([f"S{i}" for i in ticks_y], fontsize=9)
     ax.set_title("State-Value Function V(s)", fontweight="bold")
     ax.grid(False)
 
@@ -240,10 +275,10 @@ def plot_policy_quiver(
     if action_vectors is None:
         action_vectors = {0: (-1.0, 0.0), 1: (0.0, 1.0), 2: (1.0, 0.0), 3: (0.0, -1.0)}
 
-    # Griglia base: 0.0 per celle normali
+    # Base grid: 0.0 for normal cells
     grid = np.zeros((rows, cols))
     
-    # Valori sentinella fuori dal range [-0.5, 0.5]
+    # Sentinel values outside the range [-0.5, 0.5]
     T_VAL, G_VAL = -1.0, 1.0
     
     for s in range(rows * cols):
@@ -255,7 +290,7 @@ def plot_policy_quiver(
         elif s in special_states: 
             grid[r, c] = np.nan  
 
-    # 3. Configurazione Colormap
+    # 3. Colormap configuration
     cmap = plt.get_cmap("Blues").copy()
     cmap.set_under("#d9d9d9") 
     cmap.set_over("#4caf50")  
@@ -272,7 +307,7 @@ def plot_policy_quiver(
         ax=ax
     )
 
-    # Disegno testi e frecce
+    # Draw labels and arrows
     for s in range(rows * cols):
         r, c = divmod(s, cols)
         x, y = c + 0.5, r + 0.5
@@ -296,7 +331,7 @@ def plot_policy_quiver(
     ax.set_yticks(np.arange(rows) + 0.5)
     ax.set_yticklabels(np.arange(rows))
     
-    # Rimuovi i bordi esterni ma mantieni i tick
+    # Remove outer borders but keep ticks
     for spine in ax.spines.values(): 
         spine.set_visible(False)
         

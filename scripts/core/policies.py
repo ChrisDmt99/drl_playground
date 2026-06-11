@@ -125,6 +125,9 @@ def epsilon_greedy_policy(q_values: np.ndarray, epsilon: float, action_space: An
     Returns:
         action (int): The index of the selected action.
     """
+    if np.isnan(q_values).any():
+        raise RuntimeError("Found NaN in Q-values.")
+
     # Exploration: choose a random action
     if np_random.random() < epsilon:
         action = np_random.integers(0, action_space.n)

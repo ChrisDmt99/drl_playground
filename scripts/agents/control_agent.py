@@ -17,6 +17,7 @@ class ControlAgent:
             num_states: int, 
             num_actions: int, 
             config: Dict[str, Any], 
+            valid_states: List[int]
         ) -> None:
         """
         Initialize the ControlAgent with the given parameters and configurations.
@@ -26,6 +27,7 @@ class ControlAgent:
             num_states (int): The total number of states in the environment.
             num_actions (int): The total number of actions available in the environment.
             config (Dict[str, Any]): A dictionary containing parameters for algorithms and schedules.
+            valid_states (List[int]): A list of valid states in the environment.
         """
         # Set the random seed for reproducibility
         np.random.seed(seed)
@@ -45,6 +47,7 @@ class ControlAgent:
         self.gamma = config["gamma"]
         self.max_steps = config["max_steps"]
         self.control_algorithm = config["control_algorithm"]
+        self.valid_states = np.array(valid_states, dtype=np.int32)
         
         if self.control_algorithm == "mc_control":
             self.first_visit_mc = config[config["control_algorithm"] + "_params"]["first_visit"]
@@ -253,7 +256,7 @@ class ControlAgent:
             
             # Computing the MAE on the Q-table
             if Q_star is not None:
-                self.mae_history[ep] = float(np.mean(np.abs(Q_star - self.q_table)))
+                self.mae_history[ep] = float(np.mean(np.abs(Q_star[self.valid_states] - self.q_table[self.valid_states])))
             else:
                 self.mae_history[ep] = float(0.0)
 
@@ -323,7 +326,7 @@ class ControlAgent:
 
             # Computing the MAE on the Q-table
             if Q_star is not None:
-                self.mae_history[ep] = float(np.mean(np.abs(Q_star - self.q_table)))
+                self.mae_history[ep] = float(np.mean(np.abs(Q_star[self.valid_states] - self.q_table[self.valid_states])))
             else:
                 self.mae_history[ep] = float(0.0)
 
@@ -373,6 +376,7 @@ class ControlAgent:
                 
                 # Q-learning update of the Q-table
                 td_target = reward + self.gamma * self.q_table[next_state].max() * (not terminated)
+                # td_target = reward + self.gamma * self.q_table[next_state].max() * (not done)
                 td_error = td_target - self.q_table[state, action]
                 self.q_table[state, action] += self.alphas[ep] * td_error
 
@@ -393,7 +397,7 @@ class ControlAgent:
 
             # Computing the MAE on the Q-table
             if Q_star is not None:
-                self.mae_history[ep] = float(np.mean(np.abs(Q_star - self.q_table)))
+                self.mae_history[ep] = float(np.mean(np.abs(Q_star[self.valid_states] - self.q_table[self.valid_states])))
             else:
                 self.mae_history[ep] = float(0.0)
 
@@ -452,7 +456,7 @@ class ControlAgent:
                 self.action_counts[state, action] += 1
 
                 # Q-learning update of the Q-table
-                if np.random.rand() < 0.5:
+                if self.np_random.random() < 0.5:
                     argmax_Q1 = np.argmax(Q1[next_state])
                     td_target = reward + self.gamma * Q2[next_state, argmax_Q1] * (not terminated)
                     td_error = td_target - Q1[state, action]
@@ -484,7 +488,7 @@ class ControlAgent:
 
             # Computing the MAE on the Q-table
             if Q_star is not None:
-                self.mae_history[ep] = float(np.mean(np.abs(Q_star - self.q_table)))
+                self.mae_history[ep] = float(np.mean(np.abs(Q_star[self.valid_states] - self.q_table[self.valid_states])))
             else:
                 self.mae_history[ep] = float(0.0)
 

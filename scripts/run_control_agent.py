@@ -11,10 +11,9 @@ from utils.plots import plot_avg_cumulative_reward, plot_decay_schedule, plot_es
 from core.value_functions import compute_optimal_v_function
 from core.policies import compute_optimal_policy
 from core.q_functions import compute_optimal_q_function
-from utils.env_utils import compute_taxi_env_spatial_metrics
 from utils.plots import plot_value_function_heatmap, plot_q_function_heatmap, plot_policy_quiver
 from utils.env_utils import get_grid_shape, get_terminal_states, get_goal_states, get_action_names, get_action_vectors, get_special_states
-
+import matplotlib.patches as mpatches
 
 def run_control_agent(config):
     """
@@ -32,12 +31,21 @@ def run_control_agent(config):
         fickle_probability=config["fickle_probability"], 
         render_mode=config["render_mode"]
     )
-    # env = gym.make("FrozenLake-v1", is_slippery=False, render_mode=config["render_mode"])
-    # env = gym.make("CliffWalking-v1", is_slippery=False, render_mode=config["render_mode"])
+
+    # Identify valid and unreachable states 
+    # Generate a binary mask to isolate states where passenger starting point equals destination
+    valid_states_mask = np.ones(env.observation_space.n, dtype=bool)
+    for s in range(env.observation_space.n):
+        taxi_row, taxi_col, passenger_look, destination = env.unwrapped.decode(s)
+        if passenger_look == destination:
+            valid_states_mask[s] = False
+            
+    valid_state_indices = np.where(valid_states_mask)[0]
+    invalid_state_indices = np.where(~valid_states_mask)[0]
 
     # Computing the optimal Q-table and the corresponding optimal V-function
-    V_star = compute_optimal_v_function(env, gamma=config["gamma"], theta=float(config["theta"]))
     Q_star = compute_optimal_q_function(env, gamma=config["gamma"], theta=float(config["theta"]))
+    V_star = compute_optimal_v_function(env, gamma=config["gamma"], theta=float(config["theta"]))
     pi_star = compute_optimal_policy(env, gamma=config["gamma"], theta=float(config["theta"]))
 
     # Policy Agent initialization   
@@ -45,7 +53,8 @@ def run_control_agent(config):
         seed=config["seed"], 
         num_states=env.observation_space.n, 
         num_actions=env.action_space.n, 
-        config=config
+        config=config,
+        valid_states=valid_state_indices
     )
 
     # Compute the maximum possible reward for regret calculation
@@ -57,10 +66,10 @@ def run_control_agent(config):
     # Debug
     print("Training completed!")
 
-    # Set seaborn theme for a clean and professional plot style
+    # Set seaborn theme for plot style
     sns.set_theme(style="whitegrid")
 
-    # 1. PERFORMANCE METRICS AND DECAY SCHEDULES PLOTS
+    # Figure 1: Performance metrics and decay schedule plots
     if agent.policy_name in ["epsilon_greedy", "softmax"]:
         fig1 = plt.figure(figsize=(15, 11))
         ax_error = plt.subplot2grid((2, 2), (0, 0))
@@ -83,7 +92,7 @@ def run_control_agent(config):
         plot_avg_cumulative_reward(ax_reward, agent.running_average_rewards, title="Average Cumulative Reward", env=env, theoretical_return=max_possible_reward, asymptote_label="Optimal Expected Reward")
         plot_total_regret(ax_regret, agent.total_regret_history)
         
-        plt.suptitle(f"Training Analysis - Policy: {agent.policy_name}", fontsize=16, fontweight='bold')
+        plt.suptitle(f"Training Analysis (Valid States Only) - Policy: {agent.policy_name}", fontsize=16, fontweight='bold')
         plt.tight_layout()
         plt.show()
     else:
@@ -96,91 +105,76 @@ def run_control_agent(config):
         plot_total_regret(ax_regret, agent.total_regret_history)
         plot_avg_cumulative_reward(ax_reward, agent.running_average_rewards, title="Average Cumulative Reward", env=env, theoretical_return=max_possible_reward, asymptote_label="Optimal Expected Reward")
         
-        plt.suptitle(f"Training Analysis - Policy: {agent.policy_name}", fontsize=16, fontweight='bold')
+        plt.suptitle(f"Training Analysis (Valid States Only) - Policy: {agent.policy_name}", fontsize=16, fontweight='bold')
         plt.tight_layout()
         plt.show()
 
-    # 2. FINAL SPATIAL HEATMAPS GENERATION (5x5 GRID REDUCTION)
-    if config["env_name"] == "Taxi-v4":
-        v_spatial, q_spatial, visits_spatial, policy_spatial = compute_taxi_env_spatial_metrics(env=env, v_function=agent.v_function, q_table=agent.q_table, state_count=agent.state_count, final_policy=agent.final_policy)
+    # --- Impossibible states mask generation for heatmaps ---
+    # Compute error representations for both Q-table and V-function
+    q_error = (agent.q_table - Q_star) ** 2                    
+    v_error = ((agent.v_function - V_star) ** 2).reshape(-1, 1) 
 
-        # Create the figure subplots for the 4 final state heatmaps
-        fig_heat, axs = plt.subplots(2, 2, figsize=(14, 12))
-        
-        # Heatmap 1: Final V-Function
-        sns.heatmap(v_spatial, annot=True, fmt=".2f", cmap="YlGnBu", ax=axs[0, 0], cbar_kws={'label': 'Value'})
-        axs[0, 0].set_title("Spatial Heatmap of Final V-Function ($V$)", fontsize=12, fontweight='bold')
-        axs[0, 0].set_xlabel("Taxi Column (X)")
-        axs[0, 0].set_ylabel("Taxi Row (Y)")
+    # Create boolean masks tracking unreachable/impossible environment states
+    invalid_mask_q = np.zeros_like(q_error, dtype=bool)
+    invalid_mask_v = np.zeros_like(v_error, dtype=bool)
 
-        # Heatmap 2: Final Q-Table (Aggregated Mean Value of Actions)
-        sns.heatmap(q_spatial, annot=True, fmt=".2f", cmap="magma", ax=axs[0, 1], cbar_kws={'label': 'Q-Value'})
-        axs[0, 1].set_title("Spatial Heatmap of Average Q-Table Values", fontsize=12, fontweight='bold')
-        axs[0, 1].set_xlabel("Taxi Column (X)")
-        axs[0, 1].set_ylabel("Taxi Row (Y)")
+    for s in range(env.observation_space.n):
+        if not valid_states_mask[s]:
+            invalid_mask_q[s, :] = True  # Mask entire state row for Q-table
+            invalid_mask_v[s, 0] = True  # Mask state row for V-function
 
-        # Heatmap 3: State Visit Frequencies (Exploration Pattern)
-        sns.heatmap(visits_spatial, annot=True, fmt=".0f", cmap="Oranges", ax=axs[1, 0], cbar_kws={'label': 'Visits'})
-        axs[1, 0].set_title("Spatial Heatmap of State Visits (Exploration)", fontsize=12, fontweight='bold')
-        axs[1, 0].set_xlabel("Taxi Column (X)")
-        axs[1, 0].set_ylabel("Taxi Row (Y)")
+    # Figure 2 & 3 Combined: Heatmaps of Q-Table and V-Function Estimation Errors
+    fig = plt.figure(figsize=(16, 12))
+    gs = fig.add_gridspec(1, 2, width_ratios=[3.5, 1.5]) 
+    
+    # Connect the axes using the newly created grid 
+    ax_q = fig.add_subplot(gs[0, 0])
+    ax_v = fig.add_subplot(gs[0, 1])
 
-        # Heatmap 4: Final Policy
-        # Standard numerical action mapping for Taxi-v3/v4 text annotations
-        sns.heatmap(policy_spatial, annot=True, fmt="d", cmap="coolwarm", cbar=False, ax=axs[1, 1])
-        axs[1, 1].set_title("Map of Predominant Policy Actions ($\pi$)\n(0:South, 1:North, 2:East, 3:West, 4:Pickup, 5:Dropoff)", fontsize=11, fontweight='bold')
-        axs[1, 1].set_xlabel("Taxi Column (X)")
-        axs[1, 1].set_ylabel("Taxi Row (Y)")
+    # Define the state configuration for the Taxi environment
+    unreachable_states = invalid_state_indices.tolist()
+    action_names = ["South (0)", "North (1)", "East (2)", "West (3)", "Pick (4)", "Drop (5)"]
+    
+    # States where the passenger is visually located at the destination (Goal states)
+    goal_states = [s for s in range(env.observation_space.n) if env.unwrapped.decode(s)[2] == env.unwrapped.decode(s)[3]]
 
-        plt.suptitle("Analysis of Final Internal State Aggregated on 5x5 Map", fontsize=16, fontweight='bold', y=0.98)
-        plt.tight_layout()
-        plt.show()
+    # Plot the error associated with the V-function
+    plot_value_function_heatmap(
+        V=v_error, 
+        ax=ax_v,
+        rows=env.observation_space.n, 
+        cols=1, 
+        terminal_states=[], 
+        goal_states=goal_states, 
+        special_states=unreachable_states, 
+        show_text=False
+    )
+    # Update titles and axes to reflect estimation error rather than standard V-function values
+    ax_v.set_title("V-Function Squared Error vs V*", fontweight="bold")
 
-    else:
-        # Get grid environment info
-        rows, cols = get_grid_shape(env=env)
-        terminal_states = get_terminal_states(env=env)
-        goal_states = get_goal_states(env=env)
-        special_states = get_special_states(env=env)
-        action_names = get_action_names(env=env)
-        action_vectors = get_action_vectors(env=env)
+    # Plot the error associated with the Q-table
+    plot_q_function_heatmap(
+        Q=q_error, 
+        ax=ax_q, 
+        action_names=action_names,
+        terminal_states=[], 
+        goal_states=goal_states, 
+        special_states=unreachable_states,
+        show_text=False
+    )
+    # Update the title to reflect the Q-table estimation error
+    ax_q.set_title("Q-Table Squared Error vs Optimal Q*", fontweight="bold")
 
-        # Plotting results
-        fig = plt.figure(figsize=(16, 11))
-        ax_v_function = plt.subplot2grid((2, 2), (0, 0))
-        ax_q_function = plt.subplot2grid((2, 2), (0, 1))
-        ax_optimal_policy = plt.subplot2grid((2, 2), (1, 0), colspan=2)
-        plot_value_function_heatmap(
-            V=agent.v_function, 
-            rows=rows, 
-            cols=cols, 
-            terminal_states=terminal_states, 
-            goal_states=goal_states, 
-            special_states=special_states, 
-            ax=ax_v_function
-        )
-        plot_q_function_heatmap(
-            Q=agent.q_table, 
-            ax=ax_q_function, 
-            action_names=action_names,
-            terminal_states=terminal_states, 
-            goal_states=goal_states, 
-            special_states=special_states
-        )
-        plot_policy_quiver(
-            pi=agent.final_policy, 
-            rows=rows, 
-            cols=cols, 
-            terminal_states=terminal_states, 
-            goal_states=goal_states, 
-            special_states=special_states, 
-            action_vectors=action_vectors, 
-            ax=ax_optimal_policy
-        )
-        plt.tight_layout()
-        plt.show()
+    # Manually add legend patches for explanatory clarity
+    unreachable_patch = mpatches.Patch(color='#8d6e63', label='[S] Unreachable States (Excluded)')
+    goal_patch = mpatches.Patch(color='#4caf50', label='[G] Goal States')
+    ax_q.legend(handles=[unreachable_patch, goal_patch], loc='upper right')
 
-    # Close the environment
+    plt.suptitle("Functional Estimation Errors Comparison", fontsize=16, fontweight='bold')
+    plt.tight_layout()
+    plt.show()
+
+    # Close the environment session securely
     env.close()
 
 if __name__ == "__main__":
@@ -197,5 +191,5 @@ if __name__ == "__main__":
     # Read parameters from the YAML configuration file
     control_params = read_config_params(file_path=args.config)
 
-    # Run the Multi-Armed Bandit environment with the specified parameters
+    # Run the Taxi-v4 environment with the specified parameters
     run_control_agent(config=control_params)
